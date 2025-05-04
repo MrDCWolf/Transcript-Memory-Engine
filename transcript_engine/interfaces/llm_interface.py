@@ -3,10 +3,8 @@
 
 from typing import Protocol, List, Dict, Any, runtime_checkable
 
-# Placeholder for ChatMessage model - define it properly later
-class ChatMessage(Protocol):
-    role: str
-    content: str
+# Import the proper ChatMessage model
+from transcript_engine.database.models import ChatMessage
 
 @runtime_checkable
 class LLMInterface(Protocol):

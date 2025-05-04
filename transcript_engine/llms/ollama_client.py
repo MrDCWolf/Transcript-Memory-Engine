@@ -5,19 +5,11 @@ import logging
 import ollama
 from typing import List, Dict, Any, cast
 
-from transcript_engine.interfaces.llm_interface import LLMInterface, ChatMessage
+from transcript_engine.interfaces.llm_interface import LLMInterface
+from transcript_engine.database.models import ChatMessage
 from transcript_engine.core.config import Settings
 
 logger = logging.getLogger(__name__)
-
-# Temporary concrete implementation of ChatMessage until proper model is defined
-class ConcreteChatMessage:
-    def __init__(self, role: str, content: str):
-        self.role = role
-        self.content = content
-
-    def to_dict(self) -> Dict[str, str]:
-        return {"role": self.role, "content": self.content}
 
 class OllamaClient(LLMInterface):
     """Connects to a local Ollama instance to provide LLM capabilities.
@@ -73,12 +65,12 @@ class OllamaClient(LLMInterface):
         """Generates a chat response using the Ollama /api/chat endpoint.
 
         Args:
-            messages: A list of ChatMessage objects (or compatible dicts).
+            messages: A list of ChatMessage Pydantic models.
             model: The model to use (defaults to settings.default_model).
             **kwargs: Additional options for ollama.chat (e.g., temperature).
 
         Returns:
-            A ChatMessage object representing the assistant's response.
+            A ChatMessage Pydantic model representing the assistant's response.
             
         Raises:
             ollama.ResponseError: If the Ollama API returns an error.
@@ -86,8 +78,9 @@ class OllamaClient(LLMInterface):
         """
         target_model = model or self.default_model
         
-        # Convert ChatMessage protocol objects to dictionaries expected by ollama library
-        message_dicts = [{"role": msg.role, "content": msg.content} for msg in messages]
+        # Convert ChatMessage models to dictionaries expected by ollama library
+        # Using .model_dump() is standard for Pydantic v2+
+        message_dicts = [msg.model_dump() for msg in messages]
         
         try:
             logger.debug(f"Generating chat response with model '{target_model}'. History length: {len(message_dicts)}")
@@ -101,8 +94,8 @@ class OllamaClient(LLMInterface):
             role = assistant_message.get('role', 'assistant')
             content = assistant_message.get('content', '').strip()
             logger.debug(f"Generated chat response (first 50 chars): '{content[:50]}...'")
-            # Return a concrete type for now, matching the expected Protocol return type
-            return ConcreteChatMessage(role=role, content=content) 
+            # Return the proper Pydantic model
+            return ChatMessage(role=role, content=content) 
         except ollama.ResponseError as e:
             logger.error(f"Ollama API error during chat: {e.status_code} - {e.error}")
             raise

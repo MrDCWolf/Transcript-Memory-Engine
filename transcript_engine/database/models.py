@@ -67,4 +67,19 @@ class Chunk(ChunkBase):
     updated_at: datetime
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+# === Chat Message Model ===
+
+class ChatMessage(BaseModel):
+    """Model representing a single message in a chat conversation.
+    
+    Used for interacting with LLM chat endpoints.
+    """
+    role: str = Field(..., description="The role of the message sender (e.g., 'user', 'assistant', 'system').")
+    content: str = Field(..., description="The content of the message.")
+
+    # Potential future additions for storing history:
+    # session_id: str
+    # timestamp: datetime
+    # id: int 
