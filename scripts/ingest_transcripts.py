@@ -59,14 +59,9 @@ def main():
         else:
             logger.info("No existing transcripts found. Fetching all available transcripts.")
 
-        # Fetch transcripts from the source (using placeholder function for now)
-        # TODO: Add real API URL and Key to .env and Settings model
-        api_url = getattr(settings, 'transcript_api_url', "http://dummy.invalid/api")
-        api_key = getattr(settings, 'transcript_api_key', None)
-        
+        # Fetch transcripts from the source
         fetched_transcripts = fetch_transcripts(
-            api_url=api_url, 
-            api_key=api_key, 
+            settings=settings, 
             since_date=since_date
         )
 

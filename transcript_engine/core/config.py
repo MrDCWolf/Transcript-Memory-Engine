@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     # Embedding settings
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     
+    # --- External Services ---
+    # External Transcript API
+    transcript_api_url: Optional[str] = None
+    transcript_api_key: Optional[str] = None
+    limitless_api_key: Optional[str] = None
+    
+    # OpenAI API Key (Optional)
+    # openai_api_key: Optional[str] = None
+    # -------------------------
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
