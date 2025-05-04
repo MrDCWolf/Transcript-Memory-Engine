@@ -31,6 +31,7 @@ class Transcript(TranscriptBase):
     Includes database-generated fields like id, created_at, updated_at.
     """
     id: int
+    is_chunked: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -60,6 +61,7 @@ class Chunk(ChunkBase):
     Includes database-generated fields like id, created_at, updated_at.
     """
     id: int
+    is_embedded: bool = False
     # embedding is not included by default, loaded separately if needed
     created_at: datetime
     updated_at: datetime

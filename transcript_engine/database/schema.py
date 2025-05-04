@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     source_id TEXT UNIQUE NOT NULL,
     title TEXT,
     content TEXT,
+    is_chunked BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     content TEXT NOT NULL,
     start_time REAL,
     end_time REAL,
-    embedding BLOB,
+    embedding BLOB DEFAULT NULL, -- Store embedding optionally, track status separately
+    is_embedded BOOLEAN DEFAULT FALSE NOT NULL, 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transcript_id) REFERENCES transcripts (id)
