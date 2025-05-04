@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # LLM settings
     llm_provider: str = Field(default="ollama", description="LLM provider ('ollama' or 'openai')")
-    ollama_base_url: str = Field(default="http://ollama:11434", description="Base URL for Ollama API (using Docker service name)")
+    ollama_base_url: str = Field(default="http://host.docker.internal:11434", description="Base URL for Ollama API (expecting Ollama on host)")
     default_model: str = Field(default="llama3.1", description="Default LLM model to use")
     openai_api_key: str | None = Field(default=None, description="API Key for OpenAI (if used)")
     openai_model: str = Field(default="gpt-4o-mini", description="Default OpenAI model")
