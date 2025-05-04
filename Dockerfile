@@ -24,7 +24,7 @@ WORKDIR /app
 COPY pyproject.toml poetry.lock* /app/
 
 # Install project dependencies into the virtual environment managed by Poetry
-RUN poetry install --no-interaction --no-ansi --only main
+RUN poetry install --no-interaction --no-ansi --no-root --sync
 
 # Copy the rest of the application code
 COPY ./transcript_engine /app/transcript_engine

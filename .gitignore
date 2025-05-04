@@ -1,0 +1,53 @@
+# Git Ignore file for Transcript Memory Engine
+
+# Environment files
+.env
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+env/
+venv/
+ENV/
+.env/
+
+# IDE specific files
+.idea/
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Linting/Formatting cache
+.ruff_cache/
+.mypy_cache/
+
+# Data files (mounted volume content)
+data/
+# Allow data/.gitkeep if needed: !data/.gitkeep
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Docker related
+# (Keep Dockerfile and docker-compose.yml)
+
+# Logs
+*.log
+logs/
+
+# Secrets (double check if other patterns needed)
+*.key
+*.pem 
