@@ -16,6 +16,8 @@ LIMITLESS_API_BASE_URL = "https://api.limitless.ai/v1"
 REQUEST_TIMEOUT = 30.0 # seconds
 PAGE_LIMIT = 10 # Max results per page for Limitless API (according to docs)
 RATE_LIMIT_DELAY = 0.5 # Small delay between requests to be safe
+MAX_RETRIES = 3 # Max retries for transient server errors (e.g., 504)
+RETRY_DELAY_SECONDS = 5 # Delay between retries
 
 def _parse_iso_datetime(timestamp_str: Optional[str]) -> Optional[datetime]:
     """Safely parses an ISO 8601 timestamp string, handling potential None values.
@@ -86,18 +88,59 @@ def fetch_transcripts(
                 if cursor:
                     params["cursor"] = cursor
                 
-                logger.debug(f"Fetching page {page} from {base_url} with params: {params}")
-                response = client.get(base_url, params=params)
-                response.raise_for_status() # Raise HTTPStatusError for bad responses
+                current_retries = 0
+                response = None # Initialize response to None
                 
+                # Inner loop for retries
+                while current_retries < MAX_RETRIES:
+                    try:
+                        logger.debug(f"Fetching page {page} from {base_url} with params: {params} (Attempt {current_retries + 1}/{MAX_RETRIES})")
+                        response = client.get(base_url, params=params)
+                        response.raise_for_status() # Raise HTTPStatusError for bad responses (4xx, 5xx)
+                        # If successful, break the retry loop
+                        logger.debug(f"Successfully fetched page {page}.")
+                        break 
+                    except httpx.HTTPStatusError as exc:
+                        # Check for retryable server errors (5xx)
+                        if 500 <= exc.response.status_code < 600:
+                            current_retries += 1
+                            if current_retries < MAX_RETRIES:
+                                logger.warning(
+                                    f"Received status {exc.response.status_code} fetching page {page}. "
+                                    f"Retrying in {RETRY_DELAY_SECONDS}s... ({current_retries}/{MAX_RETRIES})"
+                                )
+                                time.sleep(RETRY_DELAY_SECONDS)
+                                continue # Retry the request
+                            else:
+                                logger.error(
+                                    f"Received status {exc.response.status_code} fetching page {page}. "
+                                    f"Max retries ({MAX_RETRIES}) exceeded."
+                                )
+                                raise # Re-raise the exception after max retries
+                        else:
+                            # Non-retryable HTTP error (e.g., 4xx client error)
+                            logger.error(f"HTTP error fetching page {page}: {exc}", exc_info=True)
+                            raise # Re-raise immediately
+                    except httpx.RequestError as exc:
+                         # Network-level error (connection, timeout, etc.)
+                         logger.error(f"Network error fetching page {page}: {exc}", exc_info=True)
+                         # Consider if these should be retried or are fatal
+                         raise # Re-raise for now
+                
+                # If the retry loop finished because of an error (response is None or still has error status)
+                # This check might be redundant if exceptions are always raised, but adds safety.
+                if response is None or response.is_error:
+                    logger.error(f"Failed to fetch page {page} after retries or due to non-retryable error.")
+                    break # Exit the main pagination loop
+
+                # --- Process successful response ---
                 data = response.json()
-                # Extract data based on the new API structure
                 lifelogs_data = data.get("data", {}).get("lifelogs", [])
                 next_cursor = data.get("meta", {}).get("lifelogs", {}).get("nextCursor")
                 
                 if not lifelogs_data:
                     logger.info("No lifelogs found on this page.")
-                    break # Exit loop if no data
+                    break 
 
                 logger.info(f"Fetched {len(lifelogs_data)} lifelogs on page {page}. Next cursor: {bool(next_cursor)}")
                 
@@ -122,22 +165,23 @@ def fetch_transcripts(
                 # --- Pagination Logic --- 
                 if not next_cursor:
                     logger.info("No next cursor provided by API. Assuming end of data.")
-                    break # Exit loop
+                    break 
                 
-                # Set cursor for the next iteration
                 cursor = next_cursor
                 page += 1
-                time.sleep(RATE_LIMIT_DELAY) # Be nice to the API
+                time.sleep(RATE_LIMIT_DELAY) # Be nice to the API between pages
 
-    except httpx.HTTPStatusError as exc:
+    except httpx.HTTPStatusError as exc: 
+        # This will catch errors re-raised from the retry loop (e.g., max retries exceeded or 4xx)
         logger.error(f"Limitless API request failed with status {exc.response.status_code}: {exc.response.text}")
-        raise
+        # Decide if we want to return partially fetched data or raise
+        # For now, we let it implicitly return whatever was collected before the error
     except httpx.RequestError as exc:
         logger.error(f"Network error during Limitless API request: {exc}")
-        raise
+        # Let it implicitly return whatever was collected
     except Exception as exc:
         logger.error(f"Unexpected error processing Limitless response: {exc}", exc_info=True)
-        raise # Re-raise other unexpected errors
+        # Let it implicitly return whatever was collected
 
     logger.info(f"Finished fetching from Limitless API. Total transcripts retrieved: {len(all_transcripts)}")
     return all_transcripts 
