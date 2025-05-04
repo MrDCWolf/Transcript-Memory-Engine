@@ -56,6 +56,11 @@ def main():
         
         # --- Initialize Services ---
         embedding_service: EmbeddingInterface = BGELocalEmbeddings(settings)
+        
+        # --- DEBUG: Inspect settings attributes before ChromaStore init ---
+        logger.info(f"DEBUG: Attributes available on settings object: {dir(settings)}")
+        # ----------------------------------------------------------------
+        
         vector_store: VectorStoreInterface = ChromaStore(settings)
         # -------------------------
         

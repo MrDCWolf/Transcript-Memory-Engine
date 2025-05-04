@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 LIMITLESS_API_BASE_URL = "https://api.limitless.ai/v1"
 REQUEST_TIMEOUT = 30.0 # seconds
-PAGE_LIMIT = 100 # Max results per page for Limitless API
+PAGE_LIMIT = 10 # Max results per page for Limitless API (according to docs)
 RATE_LIMIT_DELAY = 0.5 # Small delay between requests to be safe
 
 def _parse_iso_datetime(timestamp_str: Optional[str]) -> Optional[datetime]:
@@ -37,113 +37,96 @@ def _parse_iso_datetime(timestamp_str: Optional[str]) -> Optional[datetime]:
 
 def fetch_transcripts(
     settings: Settings, 
-    since_date: Optional[date] = None
+    since_date: Optional[date] = None # Note: API uses date/start/end, not simple since_date
 ) -> List[TranscriptCreate]:
-    """Fetches transcript data from the Limitless /conversations endpoint.
+    """Fetches transcripts (lifelogs) from the Limitless API.
 
-    Handles pagination and incremental fetching based on since_date.
+    Handles pagination using cursor.
+    NOTE: Date filtering based on `since_date` is not yet implemented according to API docs.
 
     Args:
-        settings: The application settings containing the API key.
-        since_date: Optional date to fetch transcripts created on or after this date.
+        settings: Application settings.
+        since_date: Optional date to fetch transcripts created on or after (currently ignored).
 
     Returns:
         A list of TranscriptCreate objects.
-        
+
     Raises:
-        ValueError: If the API key is missing.
-        httpx.RequestError: For network-related errors.
-        httpx.HTTPStatusError: For API error responses (4xx, 5xx).
+        ValueError: If the Limitless API key is not configured.
+        httpx.HTTPStatusError: If the API request fails.
     """
     api_key = settings.limitless_api_key
     if not api_key:
         logger.error("Limitless API key is missing in configuration.")
         raise ValueError("Limitless API key not configured.")
 
-    endpoint = f"{LIMITLESS_API_BASE_URL}/conversations"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    all_fetched_transcripts: List[TranscriptCreate] = []
-    starting_after: Optional[str] = None
-    page_num = 1
+    logger.info(f"Starting fetch from Limitless API. Since: {since_date} (Note: date filtering not implemented)")
 
-    logger.info(f"Starting fetch from Limitless API. Since: {since_date}")
+    headers = {
+        "X-API-Key": api_key, # Correct header
+        # "Accept": "application/json", # Not explicitly needed per docs
+    }
+
+    # Correct endpoint based on docs
+    base_url = f"{LIMITLESS_API_BASE_URL}/lifelogs"
+    
+    # API uses date/start/end params, not a simple 'since'. 
+    # For now, fetch all, implement date filtering later if needed.
+    if since_date:
+        logger.warning("'since_date' parameter is currently ignored. Fetching all lifelogs.")
+
+    all_transcripts: list[TranscriptCreate] = []
+    cursor: Optional[str] = None # Use cursor for pagination
+    page = 1
 
     try:
         with httpx.Client(headers=headers, timeout=REQUEST_TIMEOUT) as client:
             while True:
                 params: Dict[str, Any] = {"limit": PAGE_LIMIT}
-                if starting_after:
-                    params["starting_after"] = starting_after
+                if cursor:
+                    params["cursor"] = cursor
                 
-                logger.debug(f"Fetching page {page_num} from {endpoint} with params: {params}")
-                response = client.get(endpoint, params=params)
+                logger.debug(f"Fetching page {page} from {base_url} with params: {params}")
+                response = client.get(base_url, params=params)
                 response.raise_for_status() # Raise HTTPStatusError for bad responses
                 
                 data = response.json()
-                conversations = data.get("data", [])
-                has_more = data.get("has_more", False)
+                # Extract data based on the new API structure
+                lifelogs_data = data.get("data", {}).get("lifelogs", [])
+                next_cursor = data.get("meta", {}).get("lifelogs", {}).get("nextCursor")
                 
-                if not conversations:
-                    logger.info("No conversations found on this page.")
+                if not lifelogs_data:
+                    logger.info("No lifelogs found on this page.")
                     break # Exit loop if no data
 
-                logger.info(f"Fetched {len(conversations)} conversations on page {page_num}. Has more: {has_more}")
+                logger.info(f"Fetched {len(lifelogs_data)} lifelogs on page {page}. Next cursor: {bool(next_cursor)}")
                 
-                oldest_date_on_page: Optional[date] = None
-                last_item_id: Optional[str] = None
-                
-                for item in conversations:
-                    conversation_id = item.get("conversation_id")
-                    transcript_content = item.get("transcript")
-                    created_at_str = item.get("created_at")
-                    summary = item.get("summary")
+                for item in lifelogs_data:
+                    lifelog_id = item.get("id")
+                    title = item.get("title") # Can be None
+                    transcript_content = item.get("markdown") # Use markdown field
                     
-                    last_item_id = conversation_id # Track last ID for pagination
-
-                    if not conversation_id or not transcript_content:
-                        logger.warning(f"Skipping item due to missing ID or transcript: {item}")
+                    if not lifelog_id or not transcript_content:
+                        logger.warning(f"Skipping item due to missing ID or markdown: {item}")
                         continue
                         
-                    created_datetime = _parse_iso_datetime(created_at_str)
-                    item_date = created_datetime.date() if created_datetime else None
-                    
-                    # Update oldest date seen on this page (if valid)
-                    if item_date:
-                        if oldest_date_on_page is None or item_date < oldest_date_on_page:
-                             oldest_date_on_page = item_date
-                    
-                    # Check if this item itself is older than since_date
-                    # (Optional: could just rely on the oldest_date_on_page check below)
-                    # if since_date and item_date and item_date < since_date:
-                    #     logger.debug(f"Skipping item {conversation_id} older than since_date {since_date}")
-                    #     continue 
-
                     # Map to TranscriptCreate model
                     transcript_data = TranscriptCreate(
                         source="limitless",
-                        source_id=conversation_id,
-                        title=summary, # Can be None
+                        source_id=lifelog_id,
+                        title=title, 
                         content=transcript_content
                     )
-                    all_fetched_transcripts.append(transcript_data)
+                    all_transcripts.append(transcript_data)
                 
-                # --- Pagination and Incremental Fetch Logic --- 
-                if not has_more:
-                    logger.info("No more pages to fetch (has_more is false).")
+                # --- Pagination Logic --- 
+                if not next_cursor:
+                    logger.info("No next cursor provided by API. Assuming end of data.")
                     break # Exit loop
                 
-                # Check oldest date on page against since_date
-                if since_date and oldest_date_on_page and oldest_date_on_page < since_date:
-                    logger.info(f"Stopping pagination: Oldest item on page ({oldest_date_on_page}) is older than since_date ({since_date}).")
-                    break # Exit loop
-                    
-                if not last_item_id:
-                     logger.warning("Could not determine last item ID for pagination. Stopping.")
-                     break # Should not happen if conversations list was not empty
-                     
-                # Prepare for next page
-                starting_after = last_item_id
-                page_num += 1
+                # Set cursor for the next iteration
+                cursor = next_cursor
+                page += 1
                 time.sleep(RATE_LIMIT_DELAY) # Be nice to the API
 
     except httpx.HTTPStatusError as exc:
@@ -156,5 +139,5 @@ def fetch_transcripts(
         logger.error(f"Unexpected error processing Limitless response: {exc}", exc_info=True)
         raise # Re-raise other unexpected errors
 
-    logger.info(f"Finished fetching from Limitless API. Total transcripts retrieved: {len(all_fetched_transcripts)}")
-    return all_fetched_transcripts 
+    logger.info(f"Finished fetching from Limitless API. Total transcripts retrieved: {len(all_transcripts)}")
+    return all_transcripts 

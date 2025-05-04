@@ -6,6 +6,7 @@ import sqlite3
 from datetime import date
 import sys
 import os
+from dotenv import load_dotenv
 
 # Ensure the main package is in the Python path
 # This allows running the script directly while using package imports
@@ -33,8 +34,26 @@ def main():
     """Main function to run the transcript ingestion process.
     """
     logger.info("Starting transcript ingestion process...")
-    settings = get_settings()
-    
+
+    # Initialize settings, ignoring .env file to rely on os.environ
+    settings = Settings(_env_file=None)
+
+    # --- WORKAROUND for pydantic-settings/docker-compose run issue ---
+    if settings.limitless_api_key is None:
+        logger.warning("Pydantic-settings failed to load LIMITLESS_API_KEY from env, attempting direct load...")
+        direct_key = os.getenv("LIMITLESS_API_KEY")
+        if direct_key:
+            settings.limitless_api_key = direct_key
+            logger.info("Successfully loaded LIMITLESS_API_KEY directly via os.getenv.")
+        else:
+            logger.error("LIMITLESS_API_KEY not found via os.getenv either.")
+    # --- END WORKAROUND ---
+
+    # --- DEBUG ---
+    # Keep debug print for now to verify workaround
+    logger.info(f"DEBUG: Final settings.limitless_api_key: '{settings.limitless_api_key}'")
+    # -------------
+
     conn = None # Initialize conn to None
     try:
         # --- Database Connection --- 

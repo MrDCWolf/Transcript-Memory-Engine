@@ -7,6 +7,7 @@ from fastapi import Depends
 from typing import Generator
 import sqlite3
 from pathlib import Path
+import logging # Import logging
 
 from transcript_engine.core.config import Settings, get_settings
 from transcript_engine.database.crud import initialize_database
@@ -18,6 +19,8 @@ from transcript_engine.interfaces.vector_store_interface import VectorStoreInter
 from transcript_engine.interfaces.llm_interface import LLMInterface
 from transcript_engine.query.retriever import SimilarityRetriever
 from transcript_engine.query.rag_service import RAGService
+
+logger = logging.getLogger(__name__) # Get logger instance
 
 # --- Singleton instances for services (cached per application lifecycle) ---
 # Use simple global variables for simplicity here. 

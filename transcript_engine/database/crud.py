@@ -178,7 +178,7 @@ def get_transcripts_needing_chunking(conn: sqlite3.Connection, limit: int = 10) 
         logger.error(f"Error retrieving transcripts needing chunking: {e}", exc_info=True)
         raise
 
-def add_chunks(conn: sqlite3.Connection, chunks: List[ChunkCreate]) -> List[int]:
+def add_chunks(conn: sqlite3.Connection, chunks: List[ChunkCreate]) -> bool:
     """Adds multiple chunk records to the database in a single transaction.
 
     Args:
@@ -186,13 +186,14 @@ def add_chunks(conn: sqlite3.Connection, chunks: List[ChunkCreate]) -> List[int]
         chunks: A list of ChunkCreate objects to insert.
 
     Returns:
-        A list of the IDs of the newly inserted chunks.
+        True if the insertion was attempted successfully, False otherwise.
+        Note: Doesn't guarantee insertion if DB constraints fail silently in executemany.
         
     Raises:
         sqlite3.Error: If any database error occurs during the transaction.
     """
     if not chunks:
-        return []
+        return True # Nothing to add
         
     sql = "INSERT INTO chunks (transcript_id, content, start_time, end_time) VALUES (?, ?, ?, ?)"
     chunk_data = [
@@ -204,21 +205,18 @@ def add_chunks(conn: sqlite3.Connection, chunks: List[ChunkCreate]) -> List[int]
         ) 
         for chunk in chunks
     ]
-    inserted_ids: List[int] = []
     
     try:
         with conn: # Ensures transactionality
             cursor = conn.cursor()
             cursor.executemany(sql, chunk_data)
-            # Get the ID of the first inserted row in this transaction
-            first_id = cursor.lastrowid - len(chunks) + 1 
-            inserted_ids = list(range(first_id, first_id + len(chunks)))
-            logger.info(f"Added {len(chunks)} chunks to the database (IDs: {inserted_ids}).")
-        return inserted_ids
+            # Avoid cursor.lastrowid after executemany as it can be unreliable/None
+            logger.info(f"Executed insert for {len(chunks)} chunks (first transcript ID: {chunks[0].transcript_id}).")
+        return True # Indicate successful execution attempt
     except sqlite3.Error as e:
         logger.error(f"Error adding chunks to database: {e}", exc_info=True)
         # The transaction will be rolled back automatically by the context manager
-        raise
+        raise # Re-raise the error
         
 def get_chunks_needing_embedding(conn: sqlite3.Connection, limit: int = 100) -> List[Chunk]:
     """Retrieves chunks that have not yet been embedded.

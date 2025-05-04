@@ -3,17 +3,39 @@ version: '3.8'
 services:
   app:
     build: .
+    container_name: transcript-engine-app
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
       - .:/app
-      - db_data:/app/data # Named volume for persistent data
+      - ./data:/app/data
     working_dir: /app
-    env_file:
-      - .env
+    # Make app depend on ollama service
+    depends_on:
+      - ollama 
     # Command to run the application using uvicorn with hot-reloading
     # We'll create a dummy main.py soon
     command: poetry run uvicorn transcript_engine.main:app --host 0.0.0.0 --port 8000 --reload
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: transcript-engine-ollama
+    ports:
+      # Expose Ollama port to host if needed for direct access/debugging (optional)
+      - "11434:11434"
+    volumes:
+      # Mount a named volume to persist models
+      - ollama_data:/root/.ollama
+    # Optional: Add GPU support if available/configured
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
 volumes:
-  db_data: # Define the named volume 
+  # db_data: # Define the named volume # We switched to bind mount for SQLite
+  ollama_data: # Named volume for Ollama models 

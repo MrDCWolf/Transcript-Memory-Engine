@@ -2,7 +2,7 @@
 """
 
 import logging
-from typing import List
+from typing import List, Dict, Any
 
 from transcript_engine.query.retriever import SimilarityRetriever
 from transcript_engine.interfaces.llm_interface import LLMInterface
@@ -37,19 +37,20 @@ class RAGService:
         self.llm = llm
         logger.info("RAGService initialized.")
 
-    def _format_context(self, chunks: List[Chunk]) -> str:
-        """Formats the retrieved chunks into a single context string.
+    def _format_context(self, retrieved_docs: List[Dict[str, Any]]) -> str:
+        """Formats the retrieved document dictionaries into a single context string.
         
         Args:
-            chunks: A list of retrieved Chunk objects.
+            retrieved_docs: A list of dictionaries, each representing a retrieved document
+                            (must contain a 'content' key).
             
         Returns:
-            A string containing the concatenated content of the chunks.
+            A string containing the concatenated content of the documents.
         """
-        if not chunks:
+        if not retrieved_docs:
             return "No relevant context found."
-        # Simple concatenation for now
-        return "\n\n".join([chunk.content for chunk in chunks])
+        # Extract content from each dictionary
+        return "\n\n".join([doc.get('content', '') for doc in retrieved_docs])
 
     def _create_prompt(self, question: str, context: str) -> str:
         """Creates the final prompt for the LLM using a template.
@@ -86,7 +87,7 @@ class RAGService:
         # 2. Format context and create prompt
         context_str = self._format_context(retrieved_chunks)
         prompt = self._create_prompt(question=query_text, context=context_str)
-        logger.debug(f"Generated prompt for LLM (length: {len(prompt)}): \n{prompt[:500]}...") # Log start of prompt
+        logger.debug(f"Generated prompt for LLM (length: {len(prompt)}): \n------ START PROMPT ------\n{prompt}\n------ END PROMPT ------") # Log full prompt for debugging
         
         # 3. Generate answer using LLM
         try:

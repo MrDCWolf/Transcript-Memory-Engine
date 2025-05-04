@@ -35,7 +35,7 @@ class SimilarityRetriever:
         query_text: str, 
         k: int = DEFAULT_K, 
         filter_metadata: Optional[Dict[str, Any]] = None
-    ) -> List[Chunk]:
+    ) -> List[Dict[str, Any]]:
         """Embeds a query and retrieves the top k similar chunks.
 
         Args:
@@ -44,7 +44,8 @@ class SimilarityRetriever:
             filter_metadata: Optional metadata to filter the search results.
 
         Returns:
-            A list of retrieved Chunk objects, ordered by similarity.
+            A list of dictionaries representing the retrieved documents,
+            ordered by similarity. Each dict contains at least 'id' and 'content'.
             Returns an empty list if an error occurs during embedding or querying.
         """
         if not query_text:

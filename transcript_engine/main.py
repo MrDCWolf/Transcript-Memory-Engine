@@ -38,8 +38,8 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(transcripts.router)
-app.include_router(chat.router)
+app.include_router(transcripts.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

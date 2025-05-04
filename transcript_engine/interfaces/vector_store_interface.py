@@ -1,6 +1,7 @@
 """Interface definition for Vector Store services.
 """
 
+import logging
 from typing import Protocol, List, Dict, Any, Optional, runtime_checkable
 
 # Import the Chunk model from its definition location
@@ -8,6 +9,8 @@ from transcript_engine.database.models import Chunk
 
 # Type alias for embedding vectors
 EmbeddingVector = List[float]
+
+logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class VectorStoreInterface(Protocol):
@@ -35,7 +38,7 @@ class VectorStoreInterface(Protocol):
         query_embedding: EmbeddingVector, 
         k: int = 5, 
         filter_metadata: Optional[Dict[str, Any]] = None
-    ) -> List[Chunk]:
+    ) -> List[Dict[str, Any]]:
         """Queries the vector store for chunks similar to the query embedding.
 
         Args:
@@ -44,7 +47,9 @@ class VectorStoreInterface(Protocol):
             filter_metadata: Optional dictionary to filter results based on metadata.
 
         Returns:
-            A list of retrieved Chunk objects, ordered by similarity.
+            A list of dictionaries, each representing a retrieved document.
+            Each dictionary should contain at least 'id' (str) and 'content' (str),
+            along with any relevant retrieved metadata.
             
         Raises:
             Exception: For underlying vector store errors.

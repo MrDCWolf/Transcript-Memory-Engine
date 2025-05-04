@@ -45,16 +45,20 @@ logs:
 # Database and Processing Scripts (Run inside container)
 init-db:
 	@echo "Initializing database schema..."
-	# Ensure the app service is running or start it temporarily
-	docker-compose run --rm app poetry run python -c "from transcript_engine.database.crud import initialize_database; from transcript_engine.core.dependencies import get_db; from transcript_engine.core.config import get_settings; settings = get_settings(); conn = next(get_db(settings)); initialize_database(conn); print('DB Initialized.')"
+	# Run commands within the running service container using exec
+	@docker-compose exec app rm -f ./data/transcript_engine.db || true
+	@docker-compose exec app poetry run python -c "from transcript_engine.database.crud import initialize_database; from transcript_engine.core.config import get_settings; import sqlite3; import os; project_root='/app'; settings=get_settings(); db_path_relative = settings.database_url.split('///')[-1]; db_path_absolute = os.path.join(project_root, db_path_relative); os.makedirs(os.path.dirname(db_path_absolute), exist_ok=True); conn=sqlite3.connect(db_path_absolute); initialize_database(conn); conn.commit(); conn.close(); print('DB Initialized.')"
 
 ingest:
 	@echo "Running transcript ingestion script..."
-	docker-compose exec app poetry run python scripts/ingest_transcripts.py
+	# Explicitly pass the API key via -e flag. Requires LIMITLESS_API_KEY to be in the calling environment.
+	# Also cat the .env file inside the container for debugging
+	@docker-compose run --rm -e LIMITLESS_API_KEY=${LIMITLESS_API_KEY} app sh -c "echo '--- .env content inside container ---'; cat .env; echo '--- Running script ---'; poetry run python scripts/ingest_transcripts.py"
 
 process:
 	@echo "Running transcript processing script (chunking & embedding)..."
-	docker-compose exec app poetry run python scripts/process_transcripts.py
+	# Use docker-compose run instead of exec to see if it resolves code update issues
+	@docker-compose run --rm app poetry run python scripts/process_transcripts.py
 
 # Code Quality & Testing
 lint:
@@ -73,10 +77,12 @@ test:
 
 # Cleanup
 clean:
-	@echo "Cleaning up cache files, build artifacts, and Docker volumes..."
+	@echo "Cleaning up cache files, build artifacts, and data..."
 	find . -type f -name '*.py[co]' -delete
 	find . -type d -name '__pycache__' -exec rm -rf {} +
 	rm -rf .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build *.egg-info
+	# Remove contents of the data directory
+	rm -rf ./data/* 
 	# Optionally remove Docker volumes (use with caution!)
 	# docker-compose down -v 
 	@echo "Cleanup complete. Note: Docker volumes were not removed by default." 
