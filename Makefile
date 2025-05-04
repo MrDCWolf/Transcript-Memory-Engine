@@ -1,6 +1,6 @@
 # Makefile for Transcript Memory Engine
 
-.PHONY: help setup run-dev stop-dev logs init-db lint format test clean
+.PHONY: help setup run-dev stop-dev logs init-db lint format test clean ingest
 
 # Default target executed when running `make`
 default: help
@@ -49,11 +49,9 @@ init-db:
 	@docker-compose exec app rm -f ./data/transcript_engine.db || true
 	@docker-compose exec app poetry run python -c "from transcript_engine.database.crud import initialize_database; from transcript_engine.core.config import get_settings; import sqlite3; import os; project_root='/app'; settings=get_settings(); db_path_relative = settings.database_url.split('///')[-1]; db_path_absolute = os.path.join(project_root, db_path_relative); os.makedirs(os.path.dirname(db_path_absolute), exist_ok=True); conn=sqlite3.connect(db_path_absolute); initialize_database(conn); conn.commit(); conn.close(); print('DB Initialized.')"
 
-ingest:
+ingest: ## Ingest transcripts from the Limitless API
 	@echo "Running transcript ingestion script..."
-	# Explicitly pass the API key via -e flag. Requires LIMITLESS_API_KEY to be in the calling environment.
-	# Also cat the .env file inside the container for debugging
-	@docker-compose run --rm -e LIMITLESS_API_KEY=${LIMITLESS_API_KEY} app sh -c "echo '--- .env content inside container ---'; cat .env; echo '--- Running script ---'; poetry run python scripts/ingest_transcripts.py"
+	@poetry run python scripts/ingest.py $(if $(START_DATE),--start-date $(START_DATE)) $(if $(END_DATE),--end-date $(END_DATE)) $(if $(TIMEZONE),--timezone $(TIMEZONE))
 
 process:
 	@echo "Running transcript processing script (chunking & embedding)..."

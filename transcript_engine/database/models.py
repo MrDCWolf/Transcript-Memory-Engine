@@ -32,6 +32,8 @@ class Transcript(TranscriptBase):
     """
     id: int
     is_chunked: bool = False
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

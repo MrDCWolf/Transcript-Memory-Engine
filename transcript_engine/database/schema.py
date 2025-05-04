@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS transcripts (
     title TEXT,
     content TEXT,
     is_chunked BOOLEAN DEFAULT FALSE NOT NULL,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -36,4 +38,34 @@ CREATE TABLE IF NOT EXISTS chunks (
 ALL_TABLES = [
     CREATE_TRANSCRIPTS_TABLE,
     CREATE_CHUNKS_TABLE,
-] 
+]
+
+def init_db():
+    """Initialize the database with required tables."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS transcripts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                start_time TIMESTAMP,
+                end_time TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chunks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transcript_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (transcript_id) REFERENCES transcripts (id)
+            )
+            """
+        )
+        conn.commit() 
