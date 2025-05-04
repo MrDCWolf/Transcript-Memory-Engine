@@ -1,0 +1,88 @@
+# Cursor AI Coding Rules & Guidelines: Transcript Memory Engine
+
+These rules are designed to guide the AI coding assistant (Cursor) in generating high-quality, consistent, and maintainable code for the Transcript Memory Engine project.
+
+## 1. General Instructions & Persona
+
+* **Act as an expert Python developer** with deep experience in FastAPI, Pydantic, asynchronous programming, RAG pipelines, and local AI model integration (Ollama, Sentence Transformers, ChromaDB).
+* **Target Python Version:** All generated code must be compatible with **Python 3.11+**. Utilize modern language features where appropriate.
+* **Prioritize Readability & Maintainability:** Generate clear, concise, and well-commented code. Follow standard Pythonic idioms. Avoid overly complex or "clever" solutions when simpler ones suffice.
+* **Completeness:** Fully implement requested functionality. Avoid leaving placeholders like `...` or `TODO` comments unless explicitly part of a planned incremental step. Ensure all necessary imports are included.
+* **Local-First Focus:** Remember the primary goal is a local-first application. Minimize reliance on external cloud services unless explicitly requested (e.g., OpenAI fallback).
+
+## 2. Code Style & Formatting
+
+* **Black:** Strictly adhere to the `black` code formatter for all Python code. Assume default settings unless specified otherwise.
+* **Ruff:** Use `ruff` for linting *and* formatting (it can enforce `black` style). Address all `ruff` warnings and errors.
+* **PEP 8:** Follow PEP 8 guidelines for naming conventions (snake_case for variables/functions/modules, PascalCase for classes), line length (managed by Black), imports, and general code layout.
+* **Imports:** Use absolute imports within the `transcript_engine` package. Group imports according to PEP 8 (standard library, third-party, local application).
+
+## 3. Typing & Pydantic
+
+* **Type Hinting:** Mandate the use of Python type hints for **all** function signatures (arguments and return types) and variable declarations where feasible. Use modern type hints (e.g., `list[str]`, `dict[str, int]`, `str | None`).
+* **Pydantic Models:**
+    * Use Pydantic `BaseModel` extensively for defining core data structures (`Transcript`, `Chunk`, `ChatMessage`).
+    * Use Pydantic models for validating FastAPI request bodies, query parameters, and response models.
+    * Use Pydantic models when interacting with the database (data validation before insertion, data structuring after retrieval).
+    * Leverage `pydantic-settings` for loading and validating application configuration (`core/config.py`).
+
+## 4. Architecture & Modularity
+
+* **Project Structure:** Adhere to the established project structure (e.g., `api/`, `core/`, `database/`, `interfaces/`, `llms/`, `embeddings/`, `vector_stores/`, `scripts/`). Place new code in the appropriate module.
+* **Interfaces (Protocols):** Strictly implement service classes (e.g., `OllamaClient`, `ChromaStore`, `BGELocalEmbeddings`) against their defined `typing.Protocol` interfaces (`LLMInterface`, `VectorStoreInterface`, `EmbeddingInterface`). This ensures swappability.
+* **Dependency Injection (FastAPI):** Utilize FastAPI's dependency injection system (`Depends`) to provide service instances (like database connections, retrievers, generators) to API route functions. Define dependencies clearly (e.g., in `core/dependencies.py`).
+* **Single Responsibility Principle (SRP):** Keep functions and classes focused on a single, well-defined task. Avoid monolithic modules or functions.
+
+## 5. FastAPI Specifics
+
+* **Async:** Use `async def` for all FastAPI path operation functions that perform I/O (database calls, external API requests, file operations). Use asynchronous libraries (`httpx`, async DB drivers if applicable).
+* **Request/Response Models:** Always define Pydantic models for request bodies and response models (`response_model=...`) in path operation decorators for automatic validation and documentation.
+* **Error Handling:** Use FastAPI's `HTTPException` for expected errors related to client requests (e.g., 404 Not Found, 400 Bad Request, 422 Unprocessable Entity).
+* **Routers:** Organize path operations using `APIRouter` within specific modules (e.g., `api/routers/chat.py`) and include them in the main `FastAPI` app instance.
+* **Configuration:** Access configuration values (API keys, paths, etc.) via the injected `Settings` object from `pydantic-settings`.
+
+## 6. Database (SQLite)
+
+* **Module:** Use the standard `sqlite3` module.
+* **Connections/Cursors:** Use context managers (`with connection: ...` or `with connection.cursor() as cursor: ...`) to ensure resources are properly managed.
+* **Parameterization:** **Strictly** use parameterized queries (e.g., `cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))`) to prevent SQL injection vulnerabilities. **Never** use f-strings or string concatenation to build SQL queries with user input or variable data.
+* **CRUD Layer:** Implement all database interactions through functions defined in `database/crud.py`. These functions should handle connection/cursor management and accept/return Pydantic models where appropriate.
+* **Schema:** Define and manage the database schema in `database/schema.py`.
+
+## 7. Error Handling & Logging
+
+* **Specific Exceptions:** Catch specific exceptions rather than bare `except:`. Handle potential errors from file I/O, network requests (`httpx.RequestError`, `ollama.ResponseError`, etc.), database operations (`sqlite3.Error`), and library-specific issues.
+* **Logging:** Use Python's built-in `logging` module. Configure a basic logger. Log errors with tracebacks, informational messages for key operations (e.g., ingestion start/end, query processing), and debug messages for detailed flow.
+* **Context:** Include relevant context (e.g., session ID, transcript ID, query text) in log messages where helpful for debugging.
+
+## 8. Testing (Pytest)
+
+* **Framework:** Use `pytest` for writing and running tests.
+* **Coverage:** Aim for good test coverage, especially for core logic (ingestion, chunking, retrieval, generation, CRUD operations).
+* **Unit Tests:** Write unit tests for individual functions and classes.
+* **Mocking:** Use `unittest.mock` or `pytest-mock` to mock external dependencies (Ollama API calls, external transcript API, vector store interactions, database calls) during unit testing. Test against interfaces where possible.
+* **Fixtures:** Use `pytest` fixtures for setting up reusable test resources (e.g., database connections, service instances with mocked dependencies).
+* **Assertions:** Use clear and specific assertions.
+
+## 9. Documentation (Docstrings)
+
+* **Format:** Use Google-style docstrings for all public modules, classes, functions, and methods.
+* **Content:** Docstrings should clearly explain the purpose of the code, its arguments (`Args:`), what it returns (`Returns:`), and any exceptions it might raise (`Raises:`).
+
+## 10. Security & Configuration
+
+* **Secrets:** **Never** hardcode API keys, passwords, or other sensitive information directly in the source code. Load all secrets and configuration from environment variables via the `pydantic-settings` configuration object. Use `.env.example` to document required variables.
+* **Input Validation:** Rely on Pydantic models and FastAPI's automatic validation for incoming API requests. Perform necessary validation for data coming from other sources (e.g., external transcript API).
+
+## 11. Dependencies & Environment
+
+* **Poetry:** Manage all project dependencies using `poetry`. Use `poetry add` to add new dependencies. Keep `pyproject.toml` organized.
+* **Docker:** Ensure generated code runs correctly within the defined Docker environment (`Dockerfile`, `docker-compose.yml`).
+
+---
+
+**Applying These Rules:**
+
+* Reference these rules when prompting Cursor (e.g., "Implement the `fetch_transcripts` function following the project's coding rules...").
+* Use Cursor's features (`@` symbols for files/symbols, Rules feature if configured) to provide specific context.
+* Critically review generated code against these guidelines and ask for revisions if necessary.

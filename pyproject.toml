@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "transcript-memory-engine"
+version = "0.1.0"
+description = "Local-first RAG engine for querying personal transcripts."
+authors = ["Daniel Wolf <your_email@example.com>"]
+readme = "README.md"
+packages = [{include = "transcript_memory_engine"}]
+
+[tool.poetry.dependencies]
+python = "^3.11,<3.13"
+fastapi = "0.115.9"
+uvicorn = "^0.34.2"
+python-dotenv = "^1.1.0"
+jinja2 = "^3.1.6"
+pydantic-settings = "^2.9.1"
+ollama = "^0.4.8"
+chromadb = "^1.0.7"
+sentence-transformers = "^4.1.0"
+langchain-text-splitters = "^0.3.8"
+spacy = "^3.8.5"
+google-api-python-client = "^2.169.0"
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.2"
+typer = "^0.15.3"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+black = "^25.1.0"
+ruff = "^0.11.8"
+httpx = "^0.28.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - db_data:/app/data # Named volume for persistent data
+    working_dir: /app
+    env_file:
+      - .env
+    # Command to run the application using uvicorn with hot-reloading
+    # We'll create a dummy main.py soon
+    command: poetry run uvicorn transcript_engine.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  db_data: # Define the named volume 
