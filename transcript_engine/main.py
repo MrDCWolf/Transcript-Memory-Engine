@@ -12,6 +12,7 @@ from transcript_engine.core.config import Settings, get_settings
 from transcript_engine.core.dependencies import get_db
 # Import API routers
 from transcript_engine.api.routers import transcripts
+from transcript_engine.api.routers import chat
 
 app = FastAPI(
     title="Transcript Memory Engine",
@@ -30,6 +31,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(transcripts.router)
+app.include_router(chat.router)
 
 @app.get("/health", response_model=Dict[str, Any])
 async def health_check(settings: Settings = Depends(get_settings)) -> Dict[str, Any]:
