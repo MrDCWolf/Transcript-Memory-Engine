@@ -6,7 +6,9 @@ This module contains functions for interacting with the database tables.
 import sqlite3
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
+from transcript_engine.core.config import Settings
 
 from transcript_engine.database.schema import ALL_TABLES
 from transcript_engine.database.models import Transcript, TranscriptCreate, Chunk, ChunkCreate
@@ -147,6 +149,43 @@ def get_latest_transcript_timestamp(conn: sqlite3.Connection) -> Optional[dateti
                 return None
     except sqlite3.Error as e:
         logger.error(f"Error retrieving latest transcript timestamp: {e}", exc_info=True)
+        raise
+
+def get_latest_limitless_start_time(conn: sqlite3.Connection) -> Optional[datetime]:
+    """Retrieves the latest start_time of an ingested Limitless transcript.
+
+    Args:
+        conn: An active sqlite3 database connection.
+
+    Returns:
+        The datetime object of the latest transcript's start_time, 
+        or None if no Limitless transcripts are found.
+        
+    Raises:
+        sqlite3.Error: For database errors during query.
+    """
+    sql = "SELECT MAX(start_time) FROM transcripts WHERE source = ?"
+    try:
+        with conn:
+            cursor = conn.cursor()
+            result = cursor.execute(sql, ("limitless",)).fetchone()
+            if result and result[0]:
+                try:
+                    # Timestamps are stored as strings, need parsing
+                    latest_time = datetime.fromisoformat(result[0])
+                    # Ensure timezone awareness (assuming UTC storage)
+                    if latest_time.tzinfo is None:
+                        latest_time = latest_time.replace(tzinfo=timezone.utc)
+                    logger.debug(f"Retrieved latest Limitless transcript start_time: {latest_time}")
+                    return latest_time
+                except (ValueError, TypeError) as e:
+                     logger.error(f"Error parsing latest start_time from database '{result[0]}': {e}")
+                     return None
+            else:
+                logger.info("No existing Limitless transcripts found to get latest start_time.")
+                return None
+    except sqlite3.Error as e:
+        logger.error(f"Error retrieving latest Limitless transcript start_time: {e}", exc_info=True)
         raise
 
 # Add more CRUD functions for transcripts and chunks as needed
@@ -304,3 +343,14 @@ def mark_chunks_embedded(conn: sqlite3.Connection, chunk_ids: List[int]) -> int:
     except sqlite3.Error as e:
         logger.error(f"Error marking chunks {chunk_ids} as embedded: {e}", exc_info=True)
         raise 
+
+def get_db():
+    """Get a database connection.
+
+    Returns:
+        sqlite3.Connection: A connection to the SQLite database.
+    """
+    settings = Settings()
+    db_path = Path(settings.database_url.replace("sqlite:///", ""))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(db_path) 
