@@ -23,6 +23,7 @@ from transcript_engine.database.models import ChatMessage
 from transcript_engine.interfaces.llm_interface import LLMInterface # For RAGService type hint if separate
 from transcript_engine.query.retriever import SimilarityRetriever
 from transcript_engine.query.rag_service import RAGService # Assuming this is the generator
+from transcript_engine.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ router = APIRouter(
 @router.get("/", response_class=HTMLResponse)
 async def get_chat_page(
     request: Request,
-    templates: Jinja2Templates = Depends(get_templates)
+    templates: Jinja2Templates = Depends(get_templates),
+    db: sqlite3.Connection = Depends(get_db),
 ):
     """Serves the main chat HTML page.
     
@@ -43,10 +45,20 @@ async def get_chat_page(
     """
     session_id = str(uuid.uuid4())
     logger.info(f"Serving chat page, new session ID: {session_id}")
-    # In a real app, load history based on session_id from cookie/db
+    # Get current model from settings
+    settings = get_settings()
+    current_model = settings.default_model
+    # Get last transcript entry timestamp
+    last_transcript_dt = crud.get_latest_transcript_timestamp(db)
     return templates.TemplateResponse(
         "chat.html", 
-        {"request": request, "session_id": session_id, "chat_history": []}
+        {
+            "request": request,
+            "session_id": session_id,
+            "chat_history": [],
+            "current_model": current_model,
+            "last_transcript_dt": last_transcript_dt,
+        }
     )
 
 @router.post("/ask", response_class=HTMLResponse)

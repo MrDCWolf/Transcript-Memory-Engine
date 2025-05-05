@@ -5,6 +5,18 @@
 {% block content %}
 <h1>🧠 Transcript Memory Engine Chat</h1>
 
+<div class="mb-4 p-3 bg-gray-100 rounded shadow-sm flex flex-col sm:flex-row gap-4">
+    <div><strong>Current Model:</strong> {{ current_model }}</div>
+    <div>
+        <strong>Last Transcript Entry:</strong>
+        {% if last_transcript_dt %}
+            {{ last_transcript_dt.strftime('%Y-%m-%d %H:%M:%S') }}
+        {% else %}
+            <span class="text-gray-500">No transcripts found</span>
+        {% endif %}
+    </div>
+</div>
+
 <div id="chat-container">
     <div id="chat-history">
         <!-- Initial chat history can be loaded here if needed -->
