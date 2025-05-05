@@ -1,0 +1,11 @@
+<nav class="bg-gray-800 text-white p-4 shadow-md">
+    <div class="container mx-auto flex justify-between items-center">
+        <a href="/" class="text-xl font-bold hover:text-gray-300">Transcript Memory</a>
+        <div class="space-x-4">
+            <a href="{{ url_for('read_root') }}" class="hover:text-gray-300 {% if request.url.path == '/' %}underline{% endif %}">Chat</a>
+            <a href="{{ url_for('get_settings_page') }}" class="hover:text-gray-300 {% if request.url.path == '/settings/' %}underline{% endif %}">Settings</a>
+            <a href="{{ url_for('get_ingest_page') }}" class="hover:text-gray-300 {% if request.url.path == '/ingest/' %}underline{% endif %}">Ingest</a>
+            {# Add more links as needed #}
+        </div>
+    </div>
+</nav> 

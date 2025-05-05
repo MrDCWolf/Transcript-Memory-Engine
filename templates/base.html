@@ -4,15 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Transcript Memory Engine{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
     <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+    {% block head %}{% endblock %}
 </head>
-<body>
-    <div class="container">
-        {% block content %}
-        {% endblock %}
-    </div>
-    {% block scripts %}
-    {% endblock %}
+<body class="bg-gray-100">
+    {% include '_navbar.html' %}
+    <main class="container mx-auto mt-4 mb-4">
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
 </body>
 </html> 

@@ -33,7 +33,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, name="read_root")
 async def get_chat_page(
     request: Request,
     templates: Jinja2Templates = Depends(get_templates),
@@ -85,15 +85,13 @@ async def ask_question(
         # Use RAGService's answer_question which handles retrieval + generation
         
         # 2. & 3. Retrieve and Generate using RAGService
-        # Assuming RAGService.answer_question is sync, run in threadpool
-        # If it's async, just await it.
-        answer_text = await run_in_threadpool(
+        # generator.answer_question now returns a tuple (answer_text, used_chunks)
+        answer_text, used_chunks = await run_in_threadpool(
              generator.answer_question, query_text=query_text, k=k_chunks
         )
-        # TODO: Get used_chunks back from RAGService if needed for tracebacks
-        # For now, tracebacks will be empty
-        tracebacks = []
-        logger.debug(f"Generated answer for session {session_id}: '{answer_text[:100]}...'")
+        # Rename used_chunks for template context clarity
+        tracebacks = used_chunks 
+        logger.debug(f"Generated answer for session {session_id}: '{answer_text[:100]}...' (Used {len(tracebacks)} chunks)")
 
         # 4. Save Messages
         user_message = ChatMessage(

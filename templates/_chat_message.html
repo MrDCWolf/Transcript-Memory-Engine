@@ -2,14 +2,29 @@
     <div class="content">
         {{ content|markdown|safe if role == 'assistant' else content }}
     </div>
-    {% if role == 'assistant' and tracebacks %}
-        <div class="tracebacks">
-            <strong>Sources:</strong>
-            <ul>
-                {% for trace in tracebacks %}
-                    <li>{{ trace }}</li>
-                {% endfor %}
-            </ul>
+    {% if role == 'assistant' and tracebacks and tracebacks|length > 0 %}
+        <div class="tracebacks mt-2 text-xs text-gray-500">
+            <details>
+                <summary class="cursor-pointer hover:text-gray-700">Show Context ({{ tracebacks|length }} excerpts)</summary>
+                <ul class="mt-1 list-disc list-inside ml-4 space-y-1">
+                    {% for chunk in tracebacks %}
+                        {% set metadata = chunk.get('metadata', {}) %}
+                        {% set transcript_id = metadata.get('transcript_id', 'N/A') %}
+                        {% set start_time = metadata.get('start_time', 'N/A') %}
+                        {# Format start_time if numeric timestamp #}
+                        {% if start_time is number and start_time is not string %}
+                            {% set dt_obj = modules.datetime.fromtimestamp(start_time, modules.timezone.utc) %}
+                            {% set formatted_start_time = dt_obj.strftime('%Y-%m-%d %H:%M:%S UTC') %}
+                        {% else %}
+                            {% set formatted_start_time = start_time %}
+                        {% endif %}
+                        
+                        <li title="{{ chunk.get('content', '') | truncate(200) }}">
+                            Excerpt: Transcript {{ transcript_id }}, Time: {{ formatted_start_time }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
         </div>
     {% endif %}
 </div> 

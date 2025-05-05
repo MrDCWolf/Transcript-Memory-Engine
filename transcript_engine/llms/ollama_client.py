@@ -116,3 +116,12 @@ class OllamaClient(LLMInterface):
         except Exception as e:
             logger.error(f"Unexpected error during Ollama chat: {e}", exc_info=True)
             raise 
+
+    def list_models(self) -> list[str]:
+        """Returns a list of available model names from the Ollama server."""
+        try:
+            models = self.client.list()["models"]
+            return [m["name"] for m in models]
+        except Exception as e:
+            logger.error(f"Failed to list Ollama models: {e}", exc_info=True)
+            return [] 

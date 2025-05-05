@@ -25,9 +25,11 @@ from transcript_engine.api.routers import transcripts
 # from transcript_engine.api.routers import chat_ui
 from transcript_engine.api.routers import chat as chat_ui_router
 from transcript_engine.api.routers import settings as settings_router # Import settings router
+from transcript_engine.api.routers import ingestion # Add ingestion
 # Remove incorrect imports
 # from transcript_engine.api.routers import health, ingestion
 from transcript_engine.database.crud import initialize_database # Correct import path
+from transcript_engine.ingest.ingestion_service import INGESTION_STATUS # Import the status dict
 
 # Configure logging
 # TODO: Move logging config to a separate module/function
@@ -38,52 +40,76 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+lifetime_data = {}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup
     logger.info("Starting Transcript Memory Engine API...")
-    
-    # --- Reset Singletons --- 
-    # Ensure services are recreated with potentially updated settings on startup
+
+    # Reset service singletons (if any were created before startup)
     logger.info("Resetting service singletons...")
-    core_deps._embedding_service = None
-    core_deps._vector_store = None
-    core_deps._llm_service = None
-    core_deps._retriever = None
-    core_deps._rag_service = None
-    # ----------------------
-    
-    # Initialize database on startup
-    settings = get_settings() # Call get_settings to load (uses .env via config.py)
-    # app.state.settings = settings # Remove storing in app state
-    logger.info("Settings loaded.") # Simplified log
-    
-    db_url = settings.database_url # Use correct setting name
-    # Extract path from URL
+    # Example: If using a singleton pattern managed elsewhere
+    # reset_services()
+
+    # Reset INGESTION_STATUS on startup
+    logger.info("Resetting ingestion status...")
+    INGESTION_STATUS.update({
+        "status": "idle",
+        "last_run": INGESTION_STATUS.get("last_run", "Never"), # Keep last run time if available
+        "last_error": None # Clear last error
+    })
+
+    # Load settings
+    try:
+        # Access settings to trigger loading/validation via pydantic-settings
+        _ = get_settings() # Or use get_settings() if that's the dependency function
+        logger.info("Settings loaded.")
+    except Exception as e:
+        logger.error(f"Failed to load settings on startup: {e}", exc_info=True)
+        # Decide if you want to raise the error and stop startup
+        raise
+
+    # Initialize Database
+    # Get settings first
+    current_settings = get_settings()
+    db_url = current_settings.database_url # Use the correct attribute name
+    # Extract path from URL - assuming sqlite for now
     if not db_url.startswith("sqlite:///"):
         raise ValueError(f"Invalid database_url format: {db_url}. Expected 'sqlite:///path/to/db.sqlite'")
     db_path_str = db_url[len("sqlite:///"):]
-    db_path = Path(db_path_str).resolve()
-    
+    db_path = Path(db_path_str).resolve() # Convert to Path object
+
     logger.info(f"Ensuring database exists and is initialized at: {db_path}")
     try:
-        initialize_database(db_path) # Call with path
+        conn = initialize_database(db_path)
+        # Store connection if needed globally or close it
+        # If using Depends(get_db), it might handle connections per-request
+        if conn:
+             conn.close() # Close the init connection
         logger.info("Database initialization check completed.")
     except Exception as e:
-        logger.critical(f"FATAL: Database initialization failed: {e}", exc_info=True)
-        # Prevent app startup if DB init fails
-        raise RuntimeError(f"Database initialization failed: {e}") from e
+        logger.error(f"Failed to initialize database on startup: {e}", exc_info=True)
+        raise
+
+    # Initialize other services like LLM client, embedding model, vector store? 
+    # Often better done lazily via Depends unless truly needed globally at startup
+    # Example: initialize_llm_client()
+    
     yield
-    # --- Teardown --- 
+    
+    # Shutdown
     logger.info("Shutting down Transcript Memory Engine API...")
-    db_conn = core_deps._db_conn # Access global directly for shutdown
-    if db_conn:
-        logger.info("Closing database connection...")
-        db_conn.close()
-        core_deps._db_conn = None # Clear the global
-    else:
-        logger.warning("No active database connection found to close during shutdown.")
-    logger.info("Transcript Memory Engine API shutdown complete.")
-    # ----------------
+    # Clean up resources (e.g., close database connections, client sessions)
+    # Example: if limitless_client was stored globally
+    if "limitless_client" in lifetime_data:
+        try:
+            await lifetime_data["limitless_client"].close()
+            logger.info("Limitless client session closed.")
+        except Exception as e:
+            logger.error(f"Error closing Limitless client: {e}", exc_info=True)
+    # Close other resources...
+    logger.info("Shutdown complete.")
 
 # Configure logging dictionary
 uvicorn_log_config = LOGGING_CONFIG
@@ -117,6 +143,7 @@ app.include_router(transcripts.router, prefix="/api/v1")
 # Include the Chat UI router using the correct variable name
 app.include_router(chat_ui_router.router)
 app.include_router(settings_router.router) # Include the settings router
+app.include_router(ingestion.router) # Add the new ingestion router
 
 @app.get("/health", response_model=Dict[str, Any])
 async def health_check(settings: Settings = Depends(get_settings)) -> Dict[str, Any]:

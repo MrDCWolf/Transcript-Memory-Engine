@@ -1,12 +1,15 @@
 """Configuration module for Transcript Memory Engine.
 
-This module handles all application configuration using pydantic-settings.
+This module handles all application configuration using pydantic-settings,
+with support for persistent UI overrides via a JSON file.
 """
 
 import logging
+import json
+from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, Dict, Any, Union
 from pydantic import Field
 
 # Explicitly load .env file BEFORE BaseSettings reads environment variables
@@ -14,10 +17,38 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# --- In-memory storage for UI-set overrides ---
-_ui_set_ollama_url: str | None = None
-_ui_set_default_model: str | None = None
-# --------------------------------------------
+# --- Persistent UI Overrides ---
+# Use a JSON file to store settings changed via the UI
+UI_SETTINGS_FILENAME = "ui_settings.json"
+# Assume 'data' directory is adjacent to 'transcript_engine' or at project root
+# A more robust way might involve getting the project root dynamically
+# For now, let's assume it's in a 'data' subdir relative to where app runs
+# Or use an absolute path if more reliable. Let's try relative first.
+DATA_DIR = Path("./data") 
+UI_SETTINGS_PATH = DATA_DIR / UI_SETTINGS_FILENAME
+
+def _load_ui_overrides() -> Dict[str, Any]:
+    """Loads UI override settings from the JSON file."""
+    if UI_SETTINGS_PATH.exists():
+        try:
+            with open(UI_SETTINGS_PATH, 'r') as f:
+                overrides = json.load(f)
+                logger.debug(f"Loaded UI overrides from {UI_SETTINGS_PATH}: {overrides}")
+                return overrides
+        except (json.JSONDecodeError, IOError) as e:
+            logger.error(f"Error reading UI settings file {UI_SETTINGS_PATH}: {e}", exc_info=True)
+    return {}
+
+def _save_ui_overrides(overrides: Dict[str, Any]):
+    """Saves UI override settings to the JSON file."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True) # Ensure data directory exists
+        with open(UI_SETTINGS_PATH, 'w') as f:
+            json.dump(overrides, f, indent=2)
+        logger.debug(f"Saved UI overrides to {UI_SETTINGS_PATH}: {overrides}")
+    except IOError as e:
+        logger.error(f"Error writing UI settings file {UI_SETTINGS_PATH}: {e}", exc_info=True)
+# -----------------------------
 
 class Settings(BaseSettings):
     """Application settings class.
@@ -44,6 +75,11 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, description="API Key for OpenAI (if used)")
     openai_model: str = Field(default="gpt-4o-mini", description="Default OpenAI model")
     
+    # Context Window Settings (Defaults loaded from .env, can be overridden by UI)
+    model_context_window: int = Field(default=8192, description="Maximum context window size for the selected LLM in tokens.")
+    answer_buffer_tokens: int = Field(default=1000, description="Number of tokens to reserve for the LLM's answer.")
+    context_target_tokens: int | None = Field(default=None, description="Optional target token limit for context (must be <= model_context_window - answer_buffer). Useful for performance tuning.")
+    
     # Embedding settings
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", description="Name or path of the Sentence Transformer model for embeddings.")
     
@@ -56,9 +92,6 @@ class Settings(BaseSettings):
     # OpenAI API Key (Optional)
     # openai_api_key: Optional[str] = None
     # -------------------------
-
-    # LLM Configuration - Consolidate to ollama_base_url
-    llm_model_name: str = Field(default="llama3.1", description="Name of the Ollama model to use.")
 
     # API Server Configuration (for uvicorn)
     api_host: str = Field(default="0.0.0.0", description="Host for the FastAPI server.")
@@ -78,37 +111,118 @@ class Settings(BaseSettings):
     )
 
 def set_ui_ollama_url(url: str):
-    """Sets the Ollama Base URL override from the UI."""
-    global _ui_set_ollama_url
+    """Sets the Ollama Base URL override from the UI and persists it."""
     # Basic validation could be added here if desired
-    _ui_set_ollama_url = url.strip() if url else None
-    logger.info(f"UI Override: Ollama Base URL set to: {_ui_set_ollama_url}")
+    clean_url = url.strip() if url else None
+    if clean_url:
+        overrides = _load_ui_overrides()
+        overrides['ollama_base_url'] = clean_url
+        _save_ui_overrides(overrides)
+        logger.info(f"UI Override Persisted: Ollama Base URL set to: {clean_url}")
+    else:
+         # Handle potential removal of override? Or just log?
+         logger.warning("Attempted to set empty Ollama Base URL override.")
 
 def set_ui_default_model(model_name: str):
-    """Sets the Default Model Name override from the UI."""
-    global _ui_set_default_model
-    _ui_set_default_model = model_name.strip() if model_name else None
-    logger.info(f"UI Override: Default Model Name set to: {_ui_set_default_model}")
+    """Sets the Default Model Name override from the UI and persists it."""
+    clean_model_name = model_name.strip() if model_name else None
+    if clean_model_name:
+        overrides = _load_ui_overrides()
+        overrides['default_model'] = clean_model_name
+        _save_ui_overrides(overrides)
+        logger.info(f"UI Override Persisted: Default Model Name set to: {clean_model_name}")
+    else:
+        logger.warning("Attempted to set empty Default Model Name override.")
+
+def set_ui_model_context_window(value: int | None):
+    """Sets the Model Context Window override from the UI and persists it."""
+    if value is not None and value > 0:
+        overrides = _load_ui_overrides()
+        overrides['model_context_window'] = value
+        _save_ui_overrides(overrides)
+        logger.info(f"UI Override Persisted: Model Context Window set to: {value}")
+    elif 'model_context_window' in _load_ui_overrides(): # Handle removal if needed
+        overrides = _load_ui_overrides()
+        del overrides['model_context_window']
+        _save_ui_overrides(overrides)
+        logger.info("UI Override Removed: Model Context Window reverted to default.")
+
+def set_ui_answer_buffer_tokens(value: int | None):
+    """Sets the Answer Buffer Tokens override from the UI and persists it."""
+    if value is not None and value >= 0:
+        overrides = _load_ui_overrides()
+        overrides['answer_buffer_tokens'] = value
+        _save_ui_overrides(overrides)
+        logger.info(f"UI Override Persisted: Answer Buffer Tokens set to: {value}")
+    elif 'answer_buffer_tokens' in _load_ui_overrides(): # Handle removal
+        overrides = _load_ui_overrides()
+        del overrides['answer_buffer_tokens']
+        _save_ui_overrides(overrides)
+        logger.info("UI Override Removed: Answer Buffer Tokens reverted to default.")
+
+def set_ui_context_target_tokens(value: int | None):
+    """Sets the Context Target Tokens override from the UI and persists it."""
+    overrides = _load_ui_overrides()
+    if value is not None and value > 0:
+        overrides['context_target_tokens'] = value
+        _save_ui_overrides(overrides)
+        logger.info(f"UI Override Persisted: Context Target Tokens set to: {value}")
+    elif value is None and 'context_target_tokens' in overrides:
+        # If explicitly set to None/empty in UI, remove the override
+        del overrides['context_target_tokens']
+        _save_ui_overrides(overrides)
+        logger.info("UI Override Removed: Context Target Tokens reverted to default.")
+    elif value is not None: # Log invalid input but don't save
+        logger.warning(f"Attempted to set invalid Context Target Tokens override: {value}")
 
 def get_settings() -> Settings:
-    """Get application settings.
+    """Get application settings, applying persisted UI overrides.
+    
+    Loads base settings from environment/.env, then applies overrides
+    found in data/ui_settings.json.
     
     Returns:
-        Settings: The application settings instance
+        Settings: The application settings instance with overrides applied.
     """
     settings = Settings()  # Load from .env/env vars
 
-    # Apply UI overrides if they have been set
-    if _ui_set_ollama_url is not None:
-        logger.debug(f"Applying UI override for ollama_base_url: '{_ui_set_ollama_url}' (Original: '{settings.ollama_base_url}')")
-        settings.ollama_base_url = _ui_set_ollama_url
-    else:
-        logger.debug(f"No UI override for ollama_base_url, using value from env/default: '{settings.ollama_base_url}'")
-        
-    if _ui_set_default_model is not None:
-        logger.debug(f"Applying UI override for default_model: '{_ui_set_default_model}' (Original: '{settings.default_model}')")
-        settings.default_model = _ui_set_default_model
-    else:
-        logger.debug(f"No UI override for default_model, using value from env/default: '{settings.default_model}'")
+    # Load persisted UI overrides
+    ui_overrides = _load_ui_overrides()
+    
+    # Apply UI overrides if they exist in the JSON file
+    # Use a helper to avoid repetition
+    def apply_override(key: str, setting_attr: str):
+        if key in ui_overrides:
+            original_value = getattr(settings, setting_attr)
+            override_value = ui_overrides[key]
+            # Try to cast override value to the correct type if needed (e.g., str -> int)
+            try:
+                field_type = Settings.__annotations__.get(setting_attr)
+                # Handle Optional types if necessary, e.g., Optional[int]
+                is_optional = getattr(field_type, '__origin__', None) is Union and type(None) in getattr(field_type, '__args__', ()) 
+                base_type = field_type
+                if is_optional:
+                   # Get the non-None type from Optional[T]
+                   base_type = next((t for t in getattr(field_type, '__args__', ()) if t is not type(None)), None)
+                
+                if base_type is int and isinstance(override_value, str):
+                     override_value = int(override_value)
+                # Add more type checks/casts as needed (float, bool etc.)
+                    
+                if override_value != original_value:
+                    logger.debug(f"Applying UI override for {setting_attr}: '{override_value}' (Original: '{original_value}')")
+                    setattr(settings, setting_attr, override_value)
+                else:
+                    logger.debug(f"UI override for {setting_attr} matches env/default: '{original_value}'")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not apply UI override for {setting_attr}: Invalid value '{ui_overrides[key]}' ({e}). Using default: {getattr(settings, setting_attr)}")
+        else:
+            logger.debug(f"No persisted UI override for {setting_attr}, using value from env/default: '{getattr(settings, setting_attr)}'")
 
+    apply_override('ollama_base_url', 'ollama_base_url')
+    apply_override('default_model', 'default_model')
+    apply_override('model_context_window', 'model_context_window')
+    apply_override('answer_buffer_tokens', 'answer_buffer_tokens')
+    apply_override('context_target_tokens', 'context_target_tokens')
+    
     return settings 

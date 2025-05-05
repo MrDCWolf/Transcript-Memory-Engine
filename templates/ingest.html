@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Ingest Transcripts{% endblock %}
+
+{% block head_extra %}
+    <!-- Include HTMX SSE extension -->
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Ingestion Control</h1>
+
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-xl font-semibold mb-2">Current Status</h2>
+        <p><strong>Overall Status:</strong> <span class="font-mono">{{ ingestion_status.status }}</span></p>
+        <p><strong>Last Run Started:</strong> <span class="font-mono">{{ ingestion_status.last_run if ingestion_status.last_run else 'Never' }}</span></p>
+        <p><strong>Last Known Transcript Start Time:</strong> <span class="font-mono">{{ last_ingest_time if last_ingest_time else 'None Found' }}</span></p>
+         {% if ingestion_status.last_error %}
+             <p class="text-red-600"><strong>Last Error:</strong> {{ ingestion_status.last_error }}</p>
+         {% endif %}
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-xl font-semibold mb-2">Fetch and Process New Transcripts</h2>
+        <p class="mb-4">This will fetch transcripts created after <code class="font-mono bg-gray-100 p-1 rounded">{{ last_ingest_time if last_ingest_time else 'the beginning of time' }}</code> and process them.</p>
+        <form 
+            hx-post="{{ url_for('start_ingestion') }}"
+            hx-target="#ingestion-progress-container" {# Load response into this container #}
+            hx-swap="innerHTML" {# Replace the content of the container #}
+        >
+            <button 
+                type="submit" 
+                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                {% if ingestion_status.status == 'running' %}disabled{% endif %} {# Disable if already running #}
+            >
+                Start Ingestion
+            </button>
+        </form>
+    </div>
+
+    {# Container where the progress display partial (_ingest_progress.html) will be loaded #}
+    <div id="ingestion-progress-container">
+        {# Initially empty, or show a default idle state if needed #}
+        {# The POST request will populate this #}
+    </div>
+
+</div>
+{% endblock %}
+
+<style>
+.spinner {
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border-left-color: #ffffff;
+    animation: spin 1s linear infinite;
+    display: none; /* Default hidden */
+}
+
+.htmx-request .spinner {
+    display: inline-block; /* Show spinner during request */
+}
+.htmx-request #ingestion-spinner-alt {
+     display: inline; 
+}
+
+#ingestion-spinner-alt {
+    display: none; /* Hide by default */
+    margin-left: 5px;
+}
+
+</style> 

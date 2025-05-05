@@ -23,6 +23,7 @@ from transcript_engine.interfaces.vector_store_interface import VectorStoreInter
 from transcript_engine.interfaces.llm_interface import LLMInterface
 from transcript_engine.query.retriever import SimilarityRetriever
 from transcript_engine.query.rag_service import RAGService
+from transcript_engine.interfaces.limitless import LimitlessInterface, LimitlessAPIClient
 
 logger = logging.getLogger(__name__) # Get logger instance
 
@@ -33,6 +34,7 @@ _vector_store: VectorStoreInterface | None = None
 _llm_service: LLMInterface | None = None
 _retriever: SimilarityRetriever | None = None
 _rag_service: RAGService | None = None 
+_limitless_client: LimitlessInterface | None = None # Singleton instance
 # ---------------------------------------------------------------------------
 
 # Flag to ensure initialization happens only once per application lifecycle
@@ -149,6 +151,17 @@ def get_llm_service(settings: Settings = Depends(get_settings)) -> LLMInterface:
         _llm_service = OllamaClient(settings=settings)
     return _llm_service
 
+def get_limitless_client(settings: Settings = Depends(get_settings)) -> LimitlessInterface:
+    """Provides the singleton LimitlessInterface instance."""
+    global _limitless_client
+    if _limitless_client is None:
+        logger.info("Creating LimitlessAPIClient singleton instance.")
+        _limitless_client = LimitlessAPIClient(
+            api_key=settings.limitless_api_key, 
+            save_dir=settings.raw_response_dir # Pass save dir from settings
+        )
+    return _limitless_client
+
 
 # --- Higher-Level Service Dependencies (Using other dependencies) ---
 
@@ -178,8 +191,8 @@ def get_generator( # Renamed from get_rag_service for clarity as per previous st
     return _rag_service
 
 def reset_singletons():
-    """Resets service singletons that depend on configurable settings (like LLM)."""
-    global _llm_service, _rag_service, _retriever, _embedding_service # Add others if needed
+    """Resets service singletons that depend on configurable settings."""
+    global _llm_service, _rag_service, _retriever, _embedding_service, _limitless_client # Add limitless
     
     reset_needed = False
     if _llm_service is not None:
@@ -205,6 +218,16 @@ def reset_singletons():
         _retriever = None
         reset_needed = True
         
+    # Add reset for limitless client if its config (API key?) might change via UI later
+    if _limitless_client is not None:
+        # For now, assume API key doesn't change via UI, so no reset needed.
+        # If it could, uncomment below:
+        # logger.info("Resetting Limitless client singleton due to potential settings change.")
+        # asyncio.run(_limitless_client.close()) # Close old client connection if needed
+        # _limitless_client = None
+        # reset_needed = True
+        pass 
+
     if not reset_needed:
         logger.info("reset_singletons called, but no relevant services needed resetting.")
 

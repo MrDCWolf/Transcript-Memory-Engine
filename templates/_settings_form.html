@@ -13,13 +13,58 @@
         </div>
         <div class="mt-4">
             <label for="default_model" class="block text-sm font-medium text-gray-700">Default LLM Model:</label>
+            {% if ollama_models and ollama_models|length > 0 %}
+            <select id="default_model" name="default_model" required
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                {% for model in ollama_models %}
+                    <option value="{{ model }}" {% if model == settings.default_model %}selected{% endif %}>{{ model }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
             <input type="text"
                    id="default_model"
                    name="default_model"
                    value="{{ settings.default_model }}"
                    required
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            {% endif %}
             <p class="mt-1 text-xs text-gray-500">The name of the Ollama model to use for generation (e.g., llama3.1:latest).</p>
+        </div>
+    </div>
+
+    <div class="p-4 border rounded-md shadow-sm bg-white mt-4">
+        <h2 class="text-lg font-semibold mb-2">Context Window Configuration</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="model_context_window" class="block text-sm font-medium text-gray-700">Model Context Window:</label>
+                <input type="number"
+                       id="model_context_window"
+                       name="model_context_window"
+                       value="{{ settings.model_context_window }}"
+                       min="1024" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <p class="mt-1 text-xs text-gray-500">Max tokens the model supports (e.g., 8192, 32768).</p>
+            </div>
+            <div>
+                <label for="answer_buffer_tokens" class="block text-sm font-medium text-gray-700">Answer Buffer Tokens:</label>
+                <input type="number"
+                       id="answer_buffer_tokens"
+                       name="answer_buffer_tokens"
+                       value="{{ settings.answer_buffer_tokens }}"
+                       min="0" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <p class="mt-1 text-xs text-gray-500">Tokens reserved for the answer (e.g., 1000).</p>
+            </div>
+            <div>
+                <label for="context_target_tokens" class="block text-sm font-medium text-gray-700">Context Target Tokens (Optional):</label>
+                <input type="number"
+                       id="context_target_tokens"
+                       name="context_target_tokens"
+                       value="{{ settings.context_target_tokens if settings.context_target_tokens is not none else '' }}" {# Handle None for empty value #}
+                       min="512" 
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <p class="mt-1 text-xs text-gray-500">Aim for this total context size (leave empty to use max allowed).</p>
+            </div>
         </div>
     </div>
 
@@ -29,7 +74,7 @@
         </div>
     {% endif %}
 
-    <div class="flex justify-end">
+    <div class="flex justify-end mt-4">
         <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
             Save Settings
         </button>
