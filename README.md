@@ -83,12 +83,16 @@ docker-compose up --build
 
 ### 5. Ingest & Process Transcripts
 
-Use the provided scripts to fetch, chunk, and embed your transcripts:
+- Navigate to the **Ingest** page ([http://localhost:8000/ingest/](http://localhost:8000/ingest/)) in the web UI.
+- Click "Start Ingestion" to fetch and process new transcripts.
+- The UI will show the progress through Fetch, DB Load, and Process stages using polling.
+- Alternatively, use the provided scripts:
 
 ```bash
-poetry run python scripts/ingest.py
-poetry run python scripts/chunk_transcripts.py
-poetry run python scripts/embed_chunks.py
+# These might be deprecated or used for specific needs
+# poetry run python scripts/ingest.py 
+# poetry run python scripts/chunk_transcripts.py
+# poetry run python scripts/embed_chunks.py
 ```
 
 See the `scripts/` directory for more utilities.
@@ -124,15 +128,18 @@ All configuration is managed via environment variables and loaded using `pydanti
 - **Vector Store:** [ChromaDB](https://www.trychroma.com/) for fast vector search (`transcript_engine/vector_stores/chroma_store.py`)
 - **Database:** SQLite for transcripts, chunks, and chat history (`transcript_engine/database/`)
 - **Web UI:** FastAPI, HTMX, Jinja2 templates (`transcript_engine/ui/`, `templates/`)
-- **APIs:** Modular routers for chat, settings, transcripts (`transcript_engine/api/routers/`)
+    - Chat interface (`/chat/`)
+    - Settings management (`/settings/`)
+    - Ingestion control with status polling (`/ingest/`)
+- **APIs:** Modular routers for chat, settings, transcripts, ingestion (`transcript_engine/api/routers/`)
 - **Processing:** Chunking, embedding, and retrieval logic (`transcript_engine/processing/`, `transcript_engine/query/`)
 
 ---
 
 ## Usage
 
-- **Web UI:** Chat with your transcript data, see traceable answers, manage settings.
-- **CLI Tools:** Ingest, process, and query transcripts from the command line.
+- **Web UI:** Chat with your transcript data, see traceable answers, manage settings, and trigger/monitor ingestion via the dedicated page.
+- **CLI Tools:** Ingest, process, and query transcripts from the command line (check `scripts/` for availability).
 - **Tracebacks:** Every answer links to the exact transcript segment(s) used.
 
 ---
@@ -171,6 +178,7 @@ All configuration is managed via environment variables and loaded using `pydanti
 - [x] ChromaDB vector search
 - [x] SQLite structured storage
 - [x] Modular, interface-driven architecture
+- [x] Basic Ingestion page with status polling
 - [ ] Summarization, trend tracking, task extraction (see PRD)
 - [ ] Audio integration, visualization (future phases)
 
