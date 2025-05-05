@@ -1,0 +1,15 @@
+<div class="message {{ role }}">
+    <div class="content">
+        {{ content|markdown|safe if role == 'assistant' else content }}
+    </div>
+    {% if role == 'assistant' and tracebacks %}
+        <div class="tracebacks">
+            <strong>Sources:</strong>
+            <ul>
+                {% for trace in tracebacks %}
+                    <li>{{ trace }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+</div> 

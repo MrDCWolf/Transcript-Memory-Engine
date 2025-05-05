@@ -23,9 +23,23 @@ class OllamaClient(LLMInterface):
         Args:
             settings: The application settings containing Ollama configuration.
         """
-        self.client = ollama.Client(host=settings.ollama_base_url)
-        self.default_model = settings.default_model
-        logger.info(f"Ollama client initialized for host: {settings.ollama_base_url}")
+        # Use the actual URL from settings
+        actual_url = settings.ollama_base_url
+        logger.debug(f"OllamaClient initializing internal client with host URL: '{actual_url}'") 
+        
+        # --- REMOVED TEMPORARY HARDCODING --- 
+        # forced_url = "http://localhost:11434"
+        # logger.warning(f"!!! TEMPORARY DEBUG: Forcing Ollama client URL to: '{forced_url}' !!!")
+        # -----------------------------------------
+        
+        try:
+            # Use the URL from settings
+            self.client = ollama.Client(host=actual_url)
+            self.default_model = settings.default_model
+            logger.info(f"Ollama client initialized for host: {actual_url}")
+        except Exception as e:
+             logger.error(f"Failed to initialize internal ollama.Client for host '{actual_url}': {e}", exc_info=True)
+             raise # Re-raise the exception
 
     def generate(self, prompt: str, model: str | None = None, **kwargs: Any) -> str:
         """Generates text using the Ollama /api/generate endpoint.

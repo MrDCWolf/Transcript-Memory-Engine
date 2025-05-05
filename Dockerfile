@@ -1,33 +1,30 @@
 # Use the official Python 3.11 slim image as a parent image
 FROM python:3.11-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_HOME="/opt/poetry"
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install pipx and poetry
-RUN apt-get update && apt-get install -y --no-install-recommends pipx && apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN pipx install poetry==1.8.3
-RUN pipx ensurepath
+# Install Poetry and add to PATH
+ENV POETRY_HOME=/opt/poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+    && ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry
 
-# Adding poetry to PATH explicitly (needed for subsequent RUN commands)
-ENV PATH="/root/.local/bin:$PATH"
-
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the dependency files
-COPY pyproject.toml poetry.lock* /app/
+# Copy Poetry configuration and install dependencies
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root
 
-# Install project dependencies into the virtual environment managed by Poetry
-RUN poetry install --no-interaction --no-ansi --no-root --sync
+# Copy application code
+COPY . .
 
-# Copy the rest of the application code
-COPY ./transcript_engine /app/transcript_engine
+# Define the command to run the application
+CMD ["poetry", "run", "uvicorn", "transcript_engine.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000
@@ -36,4 +33,29 @@ EXPOSE 8000
 # ENV NAME World
 
 # Define the command to run the application using poetry run
-CMD ["poetry", "run", "uvicorn", "transcript_engine.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["poetry", "run", "uvicorn", "transcript_engine.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Set working directory
+WORKDIR /app
+
+# Copy Poetry configuration
+COPY pyproject.toml poetry.lock ./
+
+# Install dependencies
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
+
+# Copy application code
+COPY . .
+
+# Install the package in development mode
+RUN poetry install --no-interaction --no-ansi 

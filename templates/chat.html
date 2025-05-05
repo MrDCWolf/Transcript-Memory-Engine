@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Transcript Memory Engine{% endblock %}
+
+{% block content %}
+<h1>🧠 Transcript Memory Engine Chat</h1>
+
+<div id="chat-container">
+    <div id="chat-history">
+        <!-- Initial chat history can be loaded here if needed -->
+        {% for message in chat_history %}
+            {% include '_chat_message.html' with context %}
+        {% endfor %}
+        <!-- New messages will be appended here by HTMX -->
+    </div>
+
+    <form 
+        hx-post="{{ url_for('ask_question') }}" 
+        hx-target="#chat-history" 
+        hx-swap="beforeend" 
+        hx-indicator="#loading-indicator"
+        hx-on::after-request="this.reset()" {# Clear form after successful request #}
+    >
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+        
+        <div class="input-group">
+            <textarea name="query_text" placeholder="Ask a question..." rows="3" required></textarea>
+            <button type="submit">Send</button>
+        </div>
+        <div id="loading-indicator" class="htmx-indicator">Thinking...</div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Optional: Scroll to bottom when new message is added
+    const chatHistory = document.getElementById('chat-history');
+    const config = { childList: true };
+    const callback = function(mutationsList, observer) {
+        for(let mutation of mutationsList) {
+            if (mutation.type === 'childList') {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+        }
+    };
+    const observer = new MutationObserver(callback);
+    observer.observe(chatHistory, config);
+
+    // Initial scroll to bottom if needed
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+</script>
+{% endblock %} 

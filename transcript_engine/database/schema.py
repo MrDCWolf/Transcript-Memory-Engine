@@ -33,11 +33,22 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 """
 
+CREATE_CHAT_MESSAGES_TABLE = """
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')), -- Enforce roles
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 # Add more table creation statements as needed (e.g., for chat history, metadata)
 
 ALL_TABLES = [
     CREATE_TRANSCRIPTS_TABLE,
     CREATE_CHUNKS_TABLE,
+    CREATE_CHAT_MESSAGES_TABLE,
 ]
 
 def init_db():

@@ -1,34 +1,30 @@
 [tool.poetry]
 name = "transcript-memory-engine"
 version = "0.1.0"
-description = "Local-first RAG engine for querying personal transcripts."
-authors = ["Daniel Wolf <your_email@example.com>"]
+description = "A RAG-based system for querying and analyzing transcripts using local LLMs."
+authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
-packages = [{include = "transcript_memory_engine"}]
+packages = [
+    { include = "transcript_engine" }
+]
 
 [tool.poetry.dependencies]
-python = "^3.11,<3.13"
-fastapi = "0.115.9"
-uvicorn = "^0.34.2"
-python-dotenv = "^1.1.0"
+python = "^3.11"
+fastapi = "^0.110.0"
+uvicorn = "^0.27.1"
+httpx = "^0.27.0"
+pydantic = "^2.6.3"
+pydantic-settings = "^2.2.1"
+chromadb = "^0.4.24"
+sentence-transformers = "^2.5.1"
+ollama = "^0.1.7"
+python-dotenv = "^1.0.1"
+langchain-text-splitters = "^0.2.1"
+numpy = "<2"
+streamlit = "^1.45.0"
 jinja2 = "^3.1.6"
-pydantic-settings = "^2.9.1"
-ollama = "^0.4.8"
-chromadb = "^1.0.7"
-sentence-transformers = "^4.1.0"
-langchain-text-splitters = "^0.3.8"
-spacy = "^3.8.5"
-google-api-python-client = "^2.169.0"
-google-auth-httplib2 = "^0.2.0"
-google-auth-oauthlib = "^1.2.2"
-typer = "^0.15.3"
-
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
-black = "^25.1.0"
-ruff = "^0.11.8"
-httpx = "^0.28.1"
+python-multipart = "^0.0.20"
+markdown-it-py = "^3.0.0"
 
 [build-system]
 requires = ["poetry-core"]

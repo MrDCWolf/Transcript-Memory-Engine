@@ -18,12 +18,17 @@ class TranscriptBase(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
 
-class TranscriptCreate(TranscriptBase):
+class TranscriptCreate(BaseModel):
     """Model for creating a new transcript in the database.
     
     Inherits common fields from TranscriptBase.
     """
-    pass
+    source: str = "limitless"  # Default source
+    source_id: str = ""  # Needs to be populated
+    title: Optional[str] = None
+    content: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 class Transcript(TranscriptBase):
     """Model representing a transcript retrieved from the database.

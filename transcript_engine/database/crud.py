@@ -6,34 +6,43 @@ This module contains functions for interacting with the database tables.
 import sqlite3
 import logging
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from pathlib import Path
 from transcript_engine.core.config import Settings
 
 from transcript_engine.database.schema import ALL_TABLES
-from transcript_engine.database.models import Transcript, TranscriptCreate, Chunk, ChunkCreate
+from transcript_engine.database.models import Transcript, TranscriptCreate, Chunk, ChunkCreate, ChatMessage
 
 logger = logging.getLogger(__name__)
 
-def initialize_database(conn: sqlite3.Connection) -> None:
+def initialize_database(db_path: str | Path) -> None:
     """Initializes the database by creating tables if they don't exist.
 
     Args:
-        conn: An active sqlite3 database connection.
+        db_path: The path to the SQLite database file.
     """
+    # Ensure parent directory exists
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    
     try:
-        with conn:
-            cursor = conn.cursor()
-            for table_sql in ALL_TABLES:
-                cursor.execute(table_sql)
-            logger.info("Database tables initialized successfully.")
+        # Connect, setup, disconnect
+        conn = sqlite3.connect(str(db_path))
+        try:
+            with conn:
+                cursor = conn.cursor()
+                for table_sql in ALL_TABLES:
+                    cursor.execute(table_sql)
+                logger.info(f"Database tables initialized successfully at {db_path}.")
+        finally:
+            conn.close()
     except sqlite3.Error as e:
-        logger.error(f"Error initializing database tables: {e}", exc_info=True)
+        logger.error(f"Error initializing database tables at {db_path}: {e}", exc_info=True)
         raise
 
 # Placeholder CRUD functions - to be implemented later
 
-def create_transcript(conn: sqlite3.Connection, transcript: TranscriptCreate) -> Optional[Transcript]:
+def create_transcript(conn: sqlite3.Connection, transcript: TranscriptCreate) -> Optional[int]:
     """Creates a new transcript record in the database.
 
     Args:
@@ -41,16 +50,21 @@ def create_transcript(conn: sqlite3.Connection, transcript: TranscriptCreate) ->
         transcript: The transcript data to create.
 
     Returns:
-        The created transcript object or None if creation failed.
+        The ID of the created transcript record, or None if creation failed before commit.
         
     Raises:
         sqlite3.IntegrityError: If a transcript with the same source_id already exists.
         sqlite3.Error: For other database errors during insertion.
     """
-    sql = """INSERT INTO transcripts (source, source_id, title, content)
-             VALUES (?, ?, ?, ?)"""
+    sql = """INSERT INTO transcripts (source, source_id, title, content, start_time, end_time)
+             VALUES (?, ?, ?, ?, ?, ?)"""
     
     try:
+        # Convert datetime objects to ISO 8601 string format for SQLite
+        # Store as TEXT - recommended for SQLite date/time
+        start_time_iso = transcript.start_time.isoformat() if transcript.start_time else None
+        end_time_iso = transcript.end_time.isoformat() if transcript.end_time else None
+
         with conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -60,20 +74,17 @@ def create_transcript(conn: sqlite3.Connection, transcript: TranscriptCreate) ->
                     transcript.source_id,
                     transcript.title,
                     transcript.content,
+                    start_time_iso, # Pass start_time
+                    end_time_iso    # Pass end_time
                 ),
             )
             transcript_id = cursor.lastrowid
-            logger.info(f"Created transcript with source_id '{transcript.source_id}' and id {transcript_id}")
-            
-            # Fetch the newly created transcript to include timestamps
-            created_transcript_row = cursor.execute(
-                "SELECT * FROM transcripts WHERE id = ?", (transcript_id,)
-            ).fetchone()
-            
-            if created_transcript_row:
-                return Transcript.model_validate(dict(created_transcript_row)) # Use model_validate for Pydantic v2
+            if transcript_id is not None:
+                logger.info(f"Created transcript with source_id '{transcript.source_id}' and id {transcript_id}")
+                return transcript_id
             else:
-                logger.error(f"Failed to fetch newly created transcript with id {transcript_id}")
+                # This case should be rare with sqlite unless an error occurred before commit
+                logger.error(f"Failed to get lastrowid after inserting transcript with source_id '{transcript.source_id}'")
                 return None
                 
     except sqlite3.IntegrityError as e:
@@ -344,6 +355,115 @@ def mark_chunks_embedded(conn: sqlite3.Connection, chunk_ids: List[int]) -> int:
         logger.error(f"Error marking chunks {chunk_ids} as embedded: {e}", exc_info=True)
         raise 
 
+def add_chat_message(conn: sqlite3.Connection, session_id: str, message: ChatMessage) -> Optional[int]:
+    """Adds a chat message to the database.
+
+    Args:
+        conn: An active sqlite3 database connection.
+        session_id: The unique identifier for the chat session.
+        message: The ChatMessage object containing role and content.
+
+    Returns:
+        The ID of the inserted chat message, or None if insertion failed.
+    
+    Raises:
+        sqlite3.Error: For database errors during insertion.
+    """
+    sql = """INSERT INTO chat_messages (session_id, role, content)
+             VALUES (?, ?, ?)"""
+    
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                sql,
+                (
+                    session_id,
+                    message.role,
+                    message.content,
+                ),
+            )
+            message_id = cursor.lastrowid
+            if message_id is not None:
+                logger.debug(f"Added chat message ID {message_id} for session {session_id}")
+                return message_id
+            else:
+                logger.error(f"Failed to get lastrowid after inserting chat message for session {session_id}")
+                return None
+    except sqlite3.Error as e:
+        logger.error(f"Error adding chat message for session {session_id}: {e}", exc_info=True)
+        raise
+
+def get_chat_history(conn: sqlite3.Connection, session_id: str, limit: int = 50) -> List[ChatMessage]:
+    """Retrieves the chat history for a given session ID.
+
+    Args:
+        conn: An active sqlite3 database connection.
+        session_id: The unique identifier for the chat session.
+        limit: The maximum number of messages to retrieve (most recent first).
+
+    Returns:
+        A list of ChatMessage objects ordered by timestamp ascending.
+    
+    Raises:
+        sqlite3.Error: For database errors during query.
+    """
+    # Retrieve messages ordered by timestamp to get the most recent, then reverse in Python for correct order
+    sql = "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?"
+    messages: List[ChatMessage] = []
+    try:
+        with conn:
+            cursor = conn.cursor()
+            rows = cursor.execute(sql, (session_id, limit)).fetchall()
+            for row in reversed(rows): # Reverse here to get chronological order
+                # Assume row_factory is working or adapt if needed
+                messages.append(ChatMessage(role=row['role'], content=row['content'])) 
+            logger.debug(f"Retrieved {len(messages)} messages for session {session_id}")
+            return messages
+    except sqlite3.Error as e:
+        logger.error(f"Error retrieving chat history for session {session_id}: {e}", exc_info=True)
+        return [] # Return empty list on error
+
+def get_distinct_transcript_dates(conn: sqlite3.Connection) -> List[date]:
+    """Fetches the distinct dates for which transcripts exist.
+
+    Assumes start_time is stored as an ISO 8601 string.
+
+    Args:
+        conn: An active sqlite3 database connection.
+
+    Returns:
+        A sorted list of unique dates (YYYY-MM-DD) found in the transcripts table.
+        Returns an empty list if no transcripts are found or an error occurs.
+    
+    Raises:
+        sqlite3.Error: For database errors during querying.
+    """
+    # Use SUBSTR or DATE() function on the ISO string column
+    sql = """SELECT DISTINCT SUBSTR(start_time, 1, 10) 
+             FROM transcripts 
+             WHERE start_time IS NOT NULL AND LENGTH(start_time) >= 10
+             ORDER BY SUBSTR(start_time, 1, 10)"""
+    dates: List[date] = []
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            for row in rows:
+                if row[0]: # Ensure the date string is not null/empty
+                    try:
+                        # The result of SUBSTR is 'YYYY-MM-DD'
+                        dates.append(date.fromisoformat(row[0]))
+                    except ValueError:
+                        logger.warning(f"Could not parse date string '{row[0]}' from database.")
+            logger.info(f"Found {len(dates)} distinct transcript dates.")
+    except sqlite3.Error as e:
+        logger.error(f"Error fetching distinct transcript dates: {e}", exc_info=True)
+        # Optionally re-raise, but returning empty list might be safer for the caller
+
+    return dates
+
 def get_db():
     """Get a database connection.
 
@@ -353,4 +473,63 @@ def get_db():
     settings = Settings()
     db_path = Path(settings.database_url.replace("sqlite:///", ""))
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(db_path) 
+    return sqlite3.connect(db_path)
+
+def add_transcripts_batch(conn: sqlite3.Connection, transcripts: List[TranscriptCreate]) -> int:
+    """Adds multiple transcript records to the database in a single transaction.
+
+    Args:
+        conn: An active sqlite3 database connection.
+        transcripts: A list of TranscriptCreate objects to insert.
+
+    Returns:
+        The number of transcripts successfully prepared for insertion.
+        Note: Due to sqlite3 limitations, `executemany` might not report 
+              per-row errors (like IntegrityError) without extra handling.
+        
+    Raises:
+        sqlite3.Error: If a database error occurs during the transaction.
+    """
+    if not transcripts:
+        return 0
+
+    sql = """INSERT INTO transcripts (source, source_id, title, content, start_time, end_time)
+             VALUES (?, ?, ?, ?, ?, ?)"""
+    
+    transcript_data = []
+    for t in transcripts:
+        start_time_iso = t.start_time.isoformat() if t.start_time else None
+        end_time_iso = t.end_time.isoformat() if t.end_time else None
+        transcript_data.append(
+            (
+                t.source,
+                t.source_id,
+                t.title,
+                t.content,
+                start_time_iso,
+                end_time_iso
+            )
+        )
+
+    try:
+        with conn: # Ensures transactionality
+            cursor = conn.cursor()
+            # Using INSERT OR IGNORE to gracefully handle duplicates within the batch
+            # Change to INSERT if strict error checking on duplicates is needed
+            cursor.execute("PRAGMA query_only = OFF") # Ensure INSERT is allowed
+            insert_sql = """INSERT OR IGNORE INTO transcripts 
+                          (source, source_id, title, content, start_time, end_time)
+                          VALUES (?, ?, ?, ?, ?, ?)"""
+            cursor.executemany(insert_sql, transcript_data)
+            inserted_count = cursor.rowcount # rowcount after executemany might be -1 or actual count
+            if inserted_count == -1:
+                 logger.warning(f"Executed INSERT OR IGNORE for {len(transcript_data)} transcripts batch. Rowcount unreliable (-1).")
+                 # Assume all were attempted; duplicates ignored silently
+                 return len(transcript_data)
+            else:
+                 logger.info(f"Executed INSERT OR IGNORE for {len(transcript_data)} transcripts batch. Rows affected: {inserted_count}. (This counts actual insertions, ignoring duplicates).")
+                 return inserted_count # Return actual number inserted if available
+                 
+    except sqlite3.Error as e:
+        logger.error(f"Error adding transcript batch to database: {e}", exc_info=True)
+        raise # Re-raise the error 

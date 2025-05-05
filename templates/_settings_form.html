@@ -1,0 +1,37 @@
+<form hx-post="/settings/" hx-target="#settings-form-container" hx-swap="outerHTML" class="space-y-4">
+    <div class="p-4 border rounded-md shadow-sm bg-white">
+        <h2 class="text-lg font-semibold mb-2">Ollama Configuration</h2>
+        <div>
+            <label for="ollama_url" class="block text-sm font-medium text-gray-700">Ollama Base URL:</label>
+            <input type="url"
+                   id="ollama_url"
+                   name="ollama_url"
+                   value="{{ settings.ollama_base_url }}"
+                   required
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            <p class="mt-1 text-xs text-gray-500">The full URL of your running Ollama instance (e.g., http://localhost:11434).</p>
+        </div>
+        <div class="mt-4">
+            <label for="default_model" class="block text-sm font-medium text-gray-700">Default LLM Model:</label>
+            <input type="text"
+                   id="default_model"
+                   name="default_model"
+                   value="{{ settings.default_model }}"
+                   required
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            <p class="mt-1 text-xs text-gray-500">The name of the Ollama model to use for generation (e.g., llama3.1:latest).</p>
+        </div>
+    </div>
+
+    {% if message %}
+        <div class="p-3 rounded-md {{ 'bg-green-100 text-green-800' if success else 'bg-red-100 text-red-800' }}">
+            {{ message }}
+        </div>
+    {% endif %}
+
+    <div class="flex justify-end">
+        <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Save Settings
+        </button>
+    </div>
+</form> 
