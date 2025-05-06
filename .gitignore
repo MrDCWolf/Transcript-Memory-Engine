@@ -50,4 +50,10 @@ logs/
 
 # Secrets (double check if other patterns needed)
 *.key
-*.pem 
+*.pem
+
+# Google OAuth client secret
+client_secret.json
+
+# User-specific Google OAuth tokens
+data/google_oauth_tokens.json 

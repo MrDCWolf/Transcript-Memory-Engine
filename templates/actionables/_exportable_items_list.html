@@ -1,0 +1,71 @@
+{% if general_error %}
+    <div class=\"alert alert-danger\" role=\"alert\">
+        <strong>Error preparing items for export:</strong> {{ general_error }}
+    </div>
+{% endif %}
+
+{% if processed_items is defined and processed_items %}
+    <h4>Items Prepared for Export:</h4>
+    <p>Review the structured details below. You can then export individual items to Google.</p>
+    <ul id=\"exportable-item-list\" class=\"list-group mb-3\">
+        {% for item in processed_items %}
+            <li class=\"list-group-item exportable-item mb-2 {% if item.error_message %}border-danger{% endif %}\" id=\"exportable-item-{{ loop.index0 }}\">
+                <div class=\"exportable-item-details\">
+                    <p><strong>Original Snippet:</strong> <q>{{ item.user_snippet | nl2br }}</q></p>
+                    <p><strong>Type:</strong> <span class=\"badge bg-primary\">{{ item.type }}</span></p>
+                    
+                    {% if item.details %}
+                        <div class=\"structured-details bg-light p-2 mb-2 border rounded\">
+                            <h6>Structured Details:</h6>
+                            <pre style=\"white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;\">{{ item.details | tojson(indent=2) }}</pre>
+                        </div>
+                        <button class=\"btn btn-sm btn-success export-btn\" 
+                                hx-post=\"{{ url_for('export_item_to_google') }}\" 
+                                hx-vals='{ \"service_type\": \"{{ item.type.lower() }}\", \"item_json\": {{ item.details | tojson }} }' 
+                                hx-target=\"#export-status-{{ loop.index0 }}\" 
+                                hx-swap=\"innerHTML\">
+                            Export to Google {{ item.type.title() }}
+                        </button>
+                        <div id=\"export-status-{{ loop.index0 }}\" class=\"mt-1 export-status-message\"></div>
+                    {% elif item.error_message %}
+                        <p class=\"text-danger\"><strong>Extraction Failed:</strong> {{ item.error_message }}</p>
+                    {% else %}
+                         <p class=\"text-warning\">No details were extracted for this item.</p>
+                    {% endif %}
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% elif processed_items is defined and not processed_items and not general_error %}
+    <p class=\"mt-3\">No items were selected or successfully prepared for export.</p>
+{% endif %}
+
+<style>
+.exportable-item {
+    border: 1px solid #dee2e6;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+}
+.exportable-item.border-danger {
+    border-color: #dc3545 !important;
+}
+.exportable-item-details q {
+    font-style: italic;
+    color: #555;
+}
+.structured-details pre {
+    max-height: 200px;
+    overflow-y: auto;
+}
+.export-status-message {
+    font-size: 0.9em;
+}
+.export-status-message .text-success {
+    color: #198754 !important;
+}
+.export-status-message .text-danger {
+    color: #dc3545 !important;
+}
+
+</style> 

@@ -26,6 +26,9 @@ from transcript_engine.api.routers import transcripts
 from transcript_engine.api.routers import chat as chat_ui_router
 from transcript_engine.api.routers import settings as settings_router # Import settings router
 from transcript_engine.api.routers import ingestion # Add ingestion
+from transcript_engine.api.routers import actionables as actionables_router # Import actionables router
+from transcript_engine.api.routers import actionables_ui # Import actionables_ui router
+from transcript_engine.api.routers import auth_google # Import auth_google router
 # Remove incorrect imports
 # from transcript_engine.api.routers import health, ingestion
 from transcript_engine.database.crud import initialize_database # Correct import path
@@ -144,6 +147,9 @@ app.include_router(transcripts.router, prefix="/api/v1")
 app.include_router(chat_ui_router.router)
 app.include_router(settings_router.router) # Include the settings router
 app.include_router(ingestion.router) # Add the new ingestion router
+app.include_router(actionables_router.router, prefix="/api/v1/actionables", tags=["Actionable Items"]) # Add actionables router
+app.include_router(actionables_ui.router, tags=["Actionable Items UI"]) # Add actionables_ui router
+app.include_router(auth_google.router, tags=["Google Authentication"]) # Add auth_google router
 
 @app.get("/health", response_model=Dict[str, Any])
 async def health_check(settings: Settings = Depends(get_settings)) -> Dict[str, Any]:

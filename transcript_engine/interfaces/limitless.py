@@ -53,9 +53,9 @@ class LimitlessAPIClient(LimitlessInterface):
     API_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S" # Limitless API uses this format
     PAGE_LIMIT = 50 # Increase limit for efficiency
     RETRY_MAX_ATTEMPTS = 5
-    RETRY_WAIT_MULTIPLIER = 1
-    RETRY_WAIT_MIN = 2
-    RETRY_WAIT_MAX = 30
+    RETRY_WAIT_MULTIPLIER = 1 # Keeps wait times increasing linearly rather than truly exponentially
+    RETRY_WAIT_MIN = 10 # Increased initial wait to 10 seconds
+    RETRY_WAIT_MAX = 60 # Increased max wait to 60 seconds
     REQUEST_TIMEOUT = 60.0 # Increased timeout
     DEFAULT_TIMEZONE = "UTC"
 
@@ -158,11 +158,31 @@ class LimitlessAPIClient(LimitlessInterface):
                          # Skip if start_time is before the requested 'since' time (API might return overlapping ranges)
                          if since and start_time and start_time < since:
                              continue
-                             
+
+                         # --- Assemble content from blockquotes ---
+                         assembled_content = "" # Initialize outside the loop
+                         if 'contents' in lifelog and isinstance(lifelog['contents'], list):
+                             for block in lifelog['contents']:
+                                 # Ensure block is a dictionary before accessing keys
+                                 if isinstance(block, dict) and block.get('type') == 'blockquote':
+                                     # Get speaker and text safely
+                                     speaker = block.get('speakerName', 'Unknown')
+                                     text = block.get('content', '').strip()
+                                     
+                                     # Only process if text is not empty after stripping
+                                     if text:
+                                         # Ensure this line has the correct indentation relative to the 'if text:'
+                                         assembled_content += f'{speaker}: {text}\n' # Combined f-string and newline
+
+                         # Use assembled content, fallback to None if empty after stripping
+                         transcript_content = assembled_content.strip() if assembled_content else None
+                         # -----------------------------------------
+
                          yield TranscriptData(
                              source_id=lifelog['id'],
                              title=lifelog.get('title'),
-                             content=lifelog.get('contentMarkdown'),
+                             # Use the newly assembled content
+                             content=transcript_content,
                              start_time=start_time,
                              end_time=end_time,
                              raw_data=lifelog # Store original data if needed

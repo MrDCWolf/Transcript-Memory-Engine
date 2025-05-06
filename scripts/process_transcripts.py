@@ -127,9 +127,31 @@ def main():
                 embeddings = embedding_service.embed_documents(chunk_texts)
                 logger.debug(f"Embeddings generated. Shape: ({len(embeddings)}, {len(embeddings[0]) if embeddings else 0})")
                 
-                # Add to vector store
-                logger.debug(f"Adding {len(chunks_to_embed)} chunks with embeddings to vector store...")
-                vector_store.add(chunks=chunks_to_embed, embeddings=embeddings)
+                # --- Prepare structured data for ChromaStore.add --- 
+                structured_chunks_to_add = []
+                if len(chunks_to_embed) == len(embeddings):
+                    for chunk, embedding_vector in zip(chunks_to_embed, embeddings):
+                        metadata = {"transcript_id": chunk.transcript_id}
+                        # Add other metadata from chunk if needed (start_time, etc.)
+                        if chunk.start_time is not None:
+                            metadata["start_time"] = chunk.start_time
+                        if chunk.end_time is not None:
+                            metadata["end_time"] = chunk.end_time
+                            
+                        chunk_data = {
+                            "content": chunk.content,
+                            "embedding": embedding_vector,
+                            "metadata": metadata,
+                        }
+                        structured_chunks_to_add.append(chunk_data)
+                else:
+                    logger.error(f"Mismatch between chunks ({len(chunks_to_embed)}) and embeddings ({len(embeddings)}) in batch starting with chunk ID {chunk_ids[0]}. Skipping batch.")
+                    continue # Skip to next batch
+                # ----------------------------------------------------
+
+                # Add to vector store using the new structured format
+                logger.debug(f"Adding {len(structured_chunks_to_add)} structured chunks to vector store...")
+                vector_store.add(structured_chunks_to_add) # Pass the list of dicts
                 logger.debug(f"Chunks added to vector store.")
                 
                 # Mark chunks as embedded in DB

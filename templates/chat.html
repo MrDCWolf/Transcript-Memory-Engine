@@ -3,44 +3,63 @@
 {% block title %}Chat - Transcript Memory Engine{% endblock %}
 
 {% block content %}
-<h1>🧠 Transcript Memory Engine Chat</h1>
+<div class="p-4 sm:p-6">
+    <h1 class="text-2xl font-bold mb-4 text-gray-800">🧠 Transcript Memory Engine Chat</h1>
 
-<div class="mb-4 p-3 bg-gray-100 rounded shadow-sm flex flex-col sm:flex-row gap-4">
-    <div><strong>Current Model:</strong> {{ current_model }}</div>
-    <div>
-        <strong>Last Transcript Entry:</strong>
-        {% if last_transcript_dt %}
-            {{ last_transcript_dt.strftime('%Y-%m-%d %H:%M:%S') }}
-        {% else %}
-            <span class="text-gray-500">No transcripts found</span>
-        {% endif %}
-    </div>
-</div>
-
-<div id="chat-container">
-    <div id="chat-history">
-        <!-- Initial chat history can be loaded here if needed -->
-        {% for message in chat_history %}
-            {% include '_chat_message.html' with context %}
-        {% endfor %}
-        <!-- New messages will be appended here by HTMX -->
-    </div>
-
-    <form 
-        hx-post="{{ url_for('ask_question') }}" 
-        hx-target="#chat-history" 
-        hx-swap="beforeend" 
-        hx-indicator="#loading-indicator"
-        hx-on::after-request="this.reset()" {# Clear form after successful request #}
-    >
-        <input type="hidden" name="session_id" value="{{ session_id }}">
-        
-        <div class="input-group">
-            <textarea name="query_text" placeholder="Ask a question..." rows="3" required></textarea>
-            <button type="submit">Send</button>
+    <div class="mb-4 p-3 border border-gray-200 bg-white rounded-lg shadow-sm flex flex-col sm:flex-row gap-4 text-sm text-gray-600">
+        <div><strong>Current Model:</strong> <span class="font-mono bg-gray-100 px-1 rounded">{{ current_model }}</span></div>
+        <div>
+            <strong>Last Transcript Entry:</strong>
+            {% if last_transcript_dt %}
+                <span class="font-mono" title="{{ last_transcript_dt.isoformat() }}">{{ last_transcript_dt.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+            {% else %}
+                <span class="text-gray-500">No transcripts found</span>
+            {% endif %}
         </div>
-        <div id="loading-indicator" class="htmx-indicator">Thinking...</div>
-    </form>
+    </div>
+
+    {# Main Chat Area #}
+    <div id="chat-container" class="bg-white rounded-lg shadow-md p-4 flex flex-col" style="height: 70vh;">
+        {# Chat History - Takes up most space, scrolls #}
+        <div id="chat-history" class="flex-grow overflow-y-auto mb-4 border border-gray-200 rounded p-3 space-y-4 bg-gray-50">
+            <!-- Initial chat history can be loaded here if needed -->
+            {% for message in chat_history %}
+                {# Ensure _chat_message.html also has appropriate styling #}
+                {% include '_chat_message.html' with context %}
+            {% endfor %}
+            <!-- New messages will be appended here by HTMX -->
+        </div>
+
+        {# Input Form - Fixed at the bottom #}
+        <form 
+            hx-post="{{ url_for('ask_question') }}" 
+            hx-target="#chat-history" 
+            hx-swap="beforeend" 
+            hx-indicator="#loading-indicator"
+            hx-on::after-request="this.reset()" {# Clear form after successful request #}
+            class="mt-auto" {# Push form to bottom if chat history is short #}
+        >
+            <input type="hidden" name="session_id" value="{{ session_id }}">
+            
+            {# Input Group using Flexbox #}
+            <div class="flex items-center gap-2">
+                <textarea 
+                    name="query_text" 
+                    placeholder="Ask a question..." 
+                    rows="2" {# Start with fewer rows, can expand if needed #}
+                    required
+                    class="flex-grow p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                ></textarea>
+                <button 
+                    type="submit"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                >
+                    Send
+                </button>
+            </div>
+            <div id="loading-indicator" class="htmx-indicator text-sm text-gray-500 mt-1">Thinking...</div>
+        </form>
+    </div>
 </div>
 {% endblock %}
 
@@ -52,7 +71,11 @@
     const callback = function(mutationsList, observer) {
         for(let mutation of mutationsList) {
             if (mutation.type === 'childList') {
-                chatHistory.scrollTop = chatHistory.scrollHeight;
+                // Scroll down smoothly
+                chatHistory.scrollTo({
+                    top: chatHistory.scrollHeight,
+                    behavior: 'smooth'
+                });
             }
         }
     };
@@ -61,5 +84,65 @@
 
     // Initial scroll to bottom if needed
     chatHistory.scrollTop = chatHistory.scrollHeight;
+
+    // Function to format chunk timestamps
+    function formatChunkTimestamps(targetElement) {
+        // Find timestamp spans within the target element (e.g., the newly swapped message)
+        targetElement.querySelectorAll('li[data-transcript-start][data-chunk-offset] .chunk-timestamp').forEach(span => {
+            const listItem = span.closest('li');
+            const transcriptStartISO = listItem.dataset.transcriptStart;
+            const chunkOffsetSeconds = parseFloat(listItem.dataset.chunkOffset);
+
+            if (!transcriptStartISO || isNaN(chunkOffsetSeconds)) {
+                console.warn("Missing or invalid data attributes for timestamp formatting:", listItem);
+                return; // Skip if data is missing or invalid
+            }
+
+            try {
+                const transcriptStartDate = new Date(transcriptStartISO);
+                // Calculate chunk time in milliseconds UTC
+                const chunkTimeMillisUTC = transcriptStartDate.getTime() + (chunkOffsetSeconds * 1000);
+                const chunkDate = new Date(chunkTimeMillisUTC);
+
+                // Format using local time and locale settings
+                const formattedTime = chunkDate.toLocaleTimeString(undefined, { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    // Optional: add date part if needed 
+                    // year: 'numeric', month: 'short', day: 'numeric', 
+                });
+                
+                // Display the formatted time
+                span.textContent = formattedTime;
+                span.title = chunkDate.toISOString(); // Add UTC ISO string as title for detail
+
+            } catch (e) {
+                console.error("Error formatting timestamp:", e, transcriptStartISO, chunkOffsetSeconds);
+                span.textContent = "Error"; // Indicate formatting error
+            }
+        });
+    }
+
+    // Listen for HTMX swaps to format timestamps in new content
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        // event.detail.target is the container element the content was swapped into
+        // event.detail.elt is the element that triggered the request (the form in this case)
+        // We want to format timestamps within the newly added content which is inside the target
+        formatChunkTimestamps(event.detail.target);
+        // Also format any timestamps in the user message that was just added
+        // Find the previous sibling of the newly added assistant message (the user message)
+        const assistantMessage = event.detail.target.lastElementChild;
+        if (assistantMessage && assistantMessage.previousElementSibling) {
+             formatChunkTimestamps(assistantMessage.previousElementSibling);
+        } else {
+             // Fallback: if only one message added (e.g. error), format whole container
+             formatChunkTimestamps(event.detail.target);
+        }
+    });
+
+    // Run formatter on initial page load in case there are tracebacks already loaded
+    formatChunkTimestamps(chatHistory);
+
 </script>
 {% endblock %} 

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Actionable Items{% endblock %}
+
+{% block head_extra %}
+<style>
+    .actionables-container {
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: bold;
+    }
+    .form-group input[type=\"date\"],
+    .form-group select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .form-group button {
+        padding: 0.75rem 1.5rem;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+    .form-group button:hover {
+        background-color: #0056b3;
+    }
+    #actionables-results {
+        margin-top: 2rem;
+        border-top: 1px solid #eee;
+        padding-top: 1rem;
+    }
+    .loading-spinner {
+        display: none; /* Hidden by default */
+        margin: 20px auto;
+        border: 5px solid #f3f3f3; /* Light grey */
+        border-top: 5px solid #3498db; /* Blue */
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    /* HTMX indicator class */
+    .htmx-request .loading-spinner {
+        display: block;
+    }
+    .htmx-request button[type=\"submit\"] {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="actionables-container">
+    <h2>Scan Transcripts for Actionable Items</h2>
+    <p>Select a date and a timeframe (morning, afternoon, or evening) to scan for potential reminders, events, and tasks mentioned in your transcripts.</p>
+
+    <form id="scan-actionables-form"
+          hx-post="{{ url_for('scan_actionable_results') }}" 
+          hx-target="#actionables-results"
+          hx-swap="innerHTML"
+          hx-indicator="#loading-indicator">
+        
+        <div class="form-group">
+            <label for="scan-date">Date:</label>
+            <input type="date" id="scan-date" name="date" required>
+        </div>
+
+        <div class="form-group">
+            <label for="timeframe">Timeframe:</label>
+            <select id="timeframe" name="timeframe" required>
+                <option value="morning">Morning (6 AM - 12 PM)</option>
+                <option value="afternoon">Afternoon (12 PM - 6 PM)</option>
+                <option value="evening">Evening (6 PM - 12 AM)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <button type="submit">Scan for Actionables</button>
+        </div>
+    </form>
+
+    <div id="loading-indicator" class="loading-spinner"></div>
+
+    <div id="actionables-results">
+        <!-- Results will be loaded here by HTMX -->
+    </div>
+</div>
+
+<script>
+    // Set default date to today for the date input
+    document.addEventListener('DOMContentLoaded', function() {
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('scan-date');
+        if (dateInput) {
+            dateInput.value = today;
+        }
+    });
+</script>
+
+{% endblock %} 

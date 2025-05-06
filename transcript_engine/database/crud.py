@@ -122,6 +122,64 @@ def get_transcript_by_source_id(conn: sqlite3.Connection, source_id: str) -> Opt
         logger.error(f"Error retrieving transcript with source_id '{source_id}': {e}", exc_info=True)
         raise
 
+def get_transcript_by_id(conn: sqlite3.Connection, transcript_id: int) -> Optional[Transcript]:
+    """Retrieves a transcript by its primary key ID.
+
+    Args:
+        conn: An active sqlite3 database connection.
+        transcript_id: The primary key ID of the transcript.
+
+    Returns:
+        The transcript object or None if not found.
+        
+    Raises:
+        sqlite3.Error: For database errors during query.
+    """
+    # Need to explicitly select columns if db connection doesn't use Row factory by default
+    # Assuming the dependency injector provides a connection *with* Row factory
+    # If not, replace * with explicit column names matching Transcript model
+    sql = "SELECT * FROM transcripts WHERE id = ?" 
+    try:
+        # No need for 'with conn:' if the connection lifecycle is managed by the dependency
+        cursor = conn.cursor()
+        # Ensure row factory is set for easy dict conversion
+        # This might be redundant if Depends(get_db) already configures it
+        original_factory = conn.row_factory
+        conn.row_factory = sqlite3.Row 
+        try:
+            row = cursor.execute(sql, (transcript_id,)).fetchone()
+            if row:
+                logger.debug(f"Retrieved transcript with id {transcript_id}")
+                # Convert row to dict before validation if using sqlite3.Row
+                transcript_data = dict(row)
+                # Manually parse datetime strings back to objects for Pydantic
+                # Pydantic's from_attributes=True expects objects, not strings for datetime
+                for key in ['start_time', 'end_time', 'created_at', 'updated_at']:
+                    if key in transcript_data and transcript_data[key] and isinstance(transcript_data[key], str):
+                        try:
+                            dt_obj = datetime.fromisoformat(transcript_data[key].replace('Z', '+00:00'))
+                            # Ensure timezone aware (UTC)
+                            if dt_obj.tzinfo is None:
+                                dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                            transcript_data[key] = dt_obj
+                        except ValueError:
+                             logger.warning(f"Could not parse datetime string '{transcript_data[key]}' for key '{key}' in transcript {transcript_id}")
+                             transcript_data[key] = None # Or handle as error
+                    elif key in transcript_data and transcript_data[key] is None:
+                         # Ensure None remains None, Pydantic handles Optional correctly
+                         pass 
+                     
+                return Transcript.model_validate(transcript_data)
+            else:
+                logger.debug(f"Transcript with id {transcript_id} not found.")
+                return None
+        finally:
+             # Restore original row factory if changed
+             conn.row_factory = original_factory
+    except sqlite3.Error as e:
+        logger.error(f"Error retrieving transcript with id {transcript_id}: {e}", exc_info=True)
+        raise
+
 def get_latest_transcript_timestamp(conn: sqlite3.Connection) -> Optional[datetime]:
     """Retrieves the creation timestamp of the most recently added transcript.
 
@@ -143,18 +201,23 @@ def get_latest_transcript_timestamp(conn: sqlite3.Connection) -> Optional[dateti
             if result and result[0]:
                 # SQLite timestamp might be string, attempt to parse
                 try:
-                    # Assuming format like 'YYYY-MM-DD HH:MM:SS' 
-                    # Adjust format if database stores it differently
+                    # Use fromisoformat which handles standard formats
                     timestamp_str = result[0]
-                    # Handle potential timezone info if stored (e.g., appended +00:00)
-                    timestamp_str = timestamp_str.split('+')[0].split('.')[0] 
+                    # Replace Z with +00:00 if necessary, though fromisoformat might handle it
+                    if timestamp_str.endswith('Z'):
+                         timestamp_str = timestamp_str[:-1] + '+00:00'
+                         
                     latest_time = datetime.fromisoformat(timestamp_str)
+                    # Ensure timezone awareness (assume UTC if naive)
+                    if latest_time.tzinfo is None:
+                        latest_time = latest_time.replace(tzinfo=timezone.utc)
+                        
                     logger.debug(f"Retrieved latest transcript timestamp: {latest_time}")
                     return latest_time
                 except (ValueError, TypeError) as e:
                      logger.error(f"Error parsing timestamp from database '{result[0]}': {e}")
                      # Fallback or re-raise depending on desired strictness
-                     return None 
+                     return None
             else:
                 logger.info("No transcripts found in the database to get latest timestamp.")
                 return None
@@ -464,6 +527,46 @@ def get_distinct_transcript_dates(conn: sqlite3.Connection) -> List[date]:
 
     return dates
 
+def get_transcript_ids_by_date_range(conn: sqlite3.Connection, start_dt: datetime, end_dt: datetime) -> List[int]:
+    """Fetches transcript IDs whose start_time falls within the given UTC datetime range.
+
+    Assumes start_time is stored as an ISO 8601 string representation of a UTC datetime.
+
+    Args:
+        conn: An active sqlite3 database connection.
+        start_dt: The start datetime (UTC, inclusive).
+        end_dt: The end datetime (UTC, exclusive).
+
+    Returns:
+        A list of transcript IDs matching the date range.
+    
+    Raises:
+        sqlite3.Error: For database errors during querying.
+    """
+    # Convert datetimes to ISO strings for SQLite text comparison
+    start_iso = start_dt.isoformat()
+    end_iso = end_dt.isoformat()
+    
+    # Ensure comparison works correctly for ISO strings (lexicographical)
+    sql = """SELECT id 
+             FROM transcripts 
+             WHERE start_time >= ? AND start_time < ? 
+             ORDER BY start_time"""
+    ids: List[int] = []
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (start_iso, end_iso))
+            rows = cursor.fetchall()
+            ids = [row[0] for row in rows]
+            logger.debug(f"Found {len(ids)} transcript IDs between {start_iso} and {end_iso}.")
+    except sqlite3.Error as e:
+        logger.error(f"Error fetching transcript IDs by date range ({start_iso} to {end_iso}): {e}", exc_info=True)
+        # Re-raise or return empty list depending on desired error handling
+        raise 
+
+    return ids
+
 def get_db():
     """Get a database connection.
 
@@ -533,3 +636,60 @@ def add_transcripts_batch(conn: sqlite3.Connection, transcripts: List[Transcript
     except sqlite3.Error as e:
         logger.error(f"Error adding transcript batch to database: {e}", exc_info=True)
         raise # Re-raise the error 
+
+def get_latest_transcript_id_for_today(conn: sqlite3.Connection) -> Optional[int]:
+    """Fetches the ID of the transcript with the latest start_time for today (UTC).
+
+    Returns:
+        The ID of the transcript with the latest start_time for today (UTC), or None if no such transcript exists.
+    """
+    now_utc = datetime.now(timezone.utc)
+    start_of_day_iso = datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0, tzinfo=timezone.utc).isoformat()
+    # Use current time as end for today
+    end_of_day_iso = now_utc.isoformat() 
+    
+    sql = """
+        SELECT id 
+        FROM transcripts 
+        WHERE start_time >= ? AND start_time < ? 
+        ORDER BY start_time DESC, id DESC 
+        LIMIT 1
+    """
+    try:
+        cursor = conn.execute(sql, (start_of_day_iso, end_of_day_iso))
+        result = cursor.fetchone()
+        if result:
+            return result["id"]
+        return None
+    except sqlite3.Error as e:
+        logger.error(f"Error getting latest transcript ID for today: {e}", exc_info=True)
+        return None
+
+def get_chunks_by_transcript_id(conn: sqlite3.Connection, transcript_id: int) -> List[Chunk]:
+    """Retrieves all chunks associated with a specific transcript ID."""
+    sql = "SELECT * FROM chunks WHERE transcript_id = ? ORDER BY id ASC"
+    chunks_list: List[Chunk] = []
+    try:
+        # Ensure row factory is set if needed
+        original_factory = conn.row_factory
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.cursor()
+            rows = cursor.execute(sql, (transcript_id,)).fetchall()
+            for row in rows:
+                # Convert row to dict and validate with Pydantic
+                chunk_data = dict(row)
+                # No datetime parsing needed for Chunk model currently
+                chunks_list.append(Chunk.model_validate(chunk_data))
+            logger.debug(f"Retrieved {len(chunks_list)} chunks for transcript_id {transcript_id}")
+        finally:
+            conn.row_factory = original_factory # Restore original factory
+            
+    except sqlite3.Error as e:
+        logger.error(f"Error retrieving chunks for transcript_id {transcript_id}: {e}", exc_info=True)
+        # Return empty list on error
+    return chunks_list
+
+# Note: Depending on how chunks are stored/queried, might need a 
+# function like get_last_chunk_for_transcript(conn, transcript_id)
+# For now, RAGService will handle using the transcript ID. 

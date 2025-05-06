@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title | default("Message") }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4>{{ title | default("Notification") }}</h4>
+                </div>
+                <div class="card-body">
+                    {% if message %}
+                        <p class="{% if 'Success' in title or 'Successfully' in message %}text-success{% elif 'Error' in title or 'Failed' in message or 'Could not' in message %}text-danger{% else %}text-info{% endif %}">
+                            {{ message }}
+                        </p>
+                    {% else %}
+                        <p>No message to display.</p>
+                    {% endif %}
+                    <hr>
+                    <a href="{{ url_for('actionables_dashboard') }}" class="btn btn-primary">Go to Actionables Dashboard</a>
+                    <a href="{{ url_for('read_root') }}" class="btn btn-secondary">Go to Chat</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

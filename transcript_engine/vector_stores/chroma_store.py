@@ -62,61 +62,70 @@ class ChromaStore(VectorStoreInterface):
             logger.error(f"Failed to initialize ChromaDB client {path_info}: {e}", exc_info=True)
             raise
 
-    def add(self, chunks: List[Chunk], embeddings: List[EmbeddingVector]) -> None:
-        """Adds chunks and their embeddings to the Chroma collection.
+    def add(self, chunks_data: List[Dict[str, Any]]) -> None:
+        """Adds chunk data (content, embedding, metadata) to the Chroma collection.
 
-        Uses chunk.id as the document ID in Chroma.
-        Stores chunk content and relevant metadata.
+        Extracts necessary information from a list of dictionaries.
+        Uses a generated unique ID (e.g., f'{transcript_id}_{chunk_index}') or relies on Chroma's 
+        automatic ID generation if IDs are not critical to pre-determine.
+        Here, we'll generate an ID based on metadata and content hash for potential deduplication.
 
         Args:
-            chunks: A list of Chunk objects.
-            embeddings: A list of corresponding embedding vectors.
-            
+            chunks_data: A list of dictionaries, each containing keys like 
+                         'content', 'embedding', 'metadata' (with 'transcript_id').
+
         Raises:
-            ValueError: If len(chunks) != len(embeddings).
             Exception: For ChromaDB errors during addition.
         """
-        if len(chunks) != len(embeddings):
-            raise ValueError("Number of chunks and embeddings must be equal.")
-        
-        if not chunks: # Nothing to add
+        if not chunks_data:
+            logger.debug("No chunk data provided to add.")
             return
 
         ids = []
         docs = []
         metadatas = []
+        embeddings_list = [] # Renamed from embeddings to avoid conflict
 
-        for chunk in chunks:
-            # Ensure chunk.id is a string for ChromaDB
-            chunk_id_str = str(chunk.id)
+        for i, chunk_dict in enumerate(chunks_data):
+            # Extract data safely
+            content = chunk_dict.get('content')
+            embedding = chunk_dict.get('embedding')
+            metadata_in = chunk_dict.get('metadata', {})
+
+            if content is None or embedding is None:
+                logger.warning(f"Skipping chunk {i} due to missing content or embedding.")
+                continue
+
+            # Generate a unique ID - combining transcript_id and a simple index or hash
+            # Using index for simplicity here, ensure transcript_id is present
+            transcript_id = metadata_in.get('transcript_id', 'unknown')
+            chunk_id_str = f"{transcript_id}_{i}" # Simple unique ID within the transcript
+            
             ids.append(chunk_id_str)
-            docs.append(chunk.content)
-            # Store relevant metadata
-            metadata = {
-                "transcript_id": chunk.transcript_id,
-                "start_time": chunk.start_time,
-                "end_time": chunk.end_time,
-                # Add other relevant metadata from Chunk model if needed
-            }
-            # Filter out None values from metadata, as Chroma expects serializable types
-            metadatas.append({k: v for k, v in metadata.items() if v is not None})
+            docs.append(content)
+            embeddings_list.append(embedding)
+            
+            # Filter out None values from metadata for Chroma compatibility
+            metadata_out = {k: v for k, v in metadata_in.items() if v is not None}
+            metadatas.append(metadata_out)
 
+        # Check if we have anything left to add after filtering
+        if not ids:
+            logger.warning("No valid chunks to add after processing the input list.")
+            return
+            
         try:
             logger.debug(f"Adding {len(ids)} chunks to Chroma collection '{self.collection_name}'.")
-            # Use upsert to handle potential ID conflicts gracefully if needed, 
-            # though ideally IDs should be unique.
-            # Using add and catching IDAlreadyExistsError for demonstration as per plan suggestion
             self.collection.add(
                 ids=ids,
-                embeddings=embeddings,
+                embeddings=embeddings_list, # Use the extracted embeddings
                 documents=docs,
                 metadatas=metadatas
             )
             logger.info(f"Successfully added {len(ids)} chunks to Chroma.")
         except IDAlreadyExistsError:
-            logger.warning(f"Attempted to add chunks with existing IDs: {ids}. Consider using upsert or checking ID generation.")
-            # Depending on desired behavior, you might want to log which specific IDs failed
-            # or implement selective upsert logic here.
+            logger.warning(f"Attempted to add chunks with potentially existing IDs (generated like '{ids[0]}', ...). Consider using upsert if duplicates are expected and need overwriting.")
+            # If using upsert, replace collection.add with collection.upsert
             pass # Or re-raise if adding duplicates is a critical error
         except Exception as e:
             logger.error(f"Failed to add documents to Chroma: {e}", exc_info=True)

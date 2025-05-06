@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from pydantic import Field
 
 # Explicitly load .env file BEFORE BaseSettings reads environment variables
@@ -82,6 +82,48 @@ class Settings(BaseSettings):
     
     # Embedding settings
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", description="Name or path of the Sentence Transformer model for embeddings.")
+    
+    # --- Feature: Actionable Items Timeframes ---
+    TIMEFRAME_BOUNDARIES: Dict[str, tuple[int, int]] = Field(
+        default={
+            "morning": (6, 12),  # 6:00 AM to 11:59 AM
+            "afternoon": (12, 18), # 12:00 PM to 5:59 PM
+            "evening": (18, 24),   # 6:00 PM to 11:59 PM (24 is exclusive end for hour)
+        },
+        description="Hour boundaries for defining morning, afternoon, evening. Start hour inclusive, end hour exclusive."
+    )
+    
+    # --- Cloud AI API Settings (for structured data extraction) ---
+    OPENAI_API_KEY: Optional[str] = Field(
+        default=None, 
+        description="API Key for OpenAI (used for structured data extraction by actionables feature)."
+    )
+    OPENAI_CHAT_MODEL_NAME: str = Field(
+        default="gpt-4o-mini", # Example, user can override
+        description="OpenAI chat model to use for structured data extraction (e.g., gpt-4o, gpt-4o-mini, gpt-3.5-turbo)."
+    )
+    
+    # --- Google OAuth Settings ---
+    GOOGLE_CLIENT_SECRET_JSON_PATH: str = Field(
+        default="client_secret.json", 
+        description="Path to the Google OAuth client_secret.json file (relative to project root)."
+    )
+    GOOGLE_OAUTH_TOKENS_PATH: str = Field(
+        default="data/google_oauth_tokens.json",
+        description="Path to store user's Google OAuth tokens (relative to project root)."
+    )
+    GOOGLE_OAUTH_REDIRECT_URI: str = Field(
+        default="http://localhost:8000/auth/google/callback",
+        description="OAuth redirect URI. Must match one configured in Google Cloud Console."
+    )
+    GOOGLE_CALENDAR_API_SCOPES: List[str] = Field(
+        default=["https://www.googleapis.com/auth/calendar.events"],
+        description="Scopes for Google Calendar API access."
+    )
+    GOOGLE_TASKS_API_SCOPES: List[str] = Field(
+        default=["https://www.googleapis.com/auth/tasks"],
+        description="Scopes for Google Tasks API access."
+    )
     
     # --- External Services ---
     # External Transcript API

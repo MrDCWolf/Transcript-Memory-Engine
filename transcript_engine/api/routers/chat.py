@@ -85,9 +85,9 @@ async def ask_question(
         # Use RAGService's answer_question which handles retrieval + generation
         
         # 2. & 3. Retrieve and Generate using RAGService
-        # generator.answer_question now returns a tuple (answer_text, used_chunks)
+        # Pass the db connection to answer_question
         answer_text, used_chunks = await run_in_threadpool(
-             generator.answer_question, query_text=query_text, k=k_chunks
+             generator.answer_question, query_text=query_text, db_conn=db, k=k_chunks
         )
         # Rename used_chunks for template context clarity
         tracebacks = used_chunks 

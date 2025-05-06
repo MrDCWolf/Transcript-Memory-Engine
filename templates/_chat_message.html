@@ -10,17 +10,20 @@
                     {% for chunk in tracebacks %}
                         {% set metadata = chunk.get('metadata', {}) %}
                         {% set transcript_id = metadata.get('transcript_id', 'N/A') %}
-                        {% set start_time = metadata.get('start_time', 'N/A') %}
-                        {# Format start_time if numeric timestamp #}
-                        {% if start_time is number and start_time is not string %}
-                            {% set dt_obj = modules.datetime.fromtimestamp(start_time, modules.timezone.utc) %}
-                            {% set formatted_start_time = dt_obj.strftime('%Y-%m-%d %H:%M:%S UTC') %}
-                        {% else %}
-                            {% set formatted_start_time = start_time %}
-                        {% endif %}
+                        {% set start_time_offset = metadata.get('start_time', 'N/A') %}
+                        {# Retrieve the parent transcript's start time we added in RAG service #}
+                        {% set transcript_start_iso = metadata.get('transcript_start_time_iso', None) %}
                         
-                        <li title="{{ chunk.get('content', '') | truncate(200) }}">
-                            Excerpt: Transcript {{ transcript_id }}, Time: {{ formatted_start_time }}
+                        {# Prepare data attributes for JS. Only add if both values are valid. #}
+                        {% set data_attrs = "" %}
+                        {% if transcript_start_iso and start_time_offset is number %}
+                           {% set data_attrs = ' data-transcript-start="' ~ transcript_start_iso ~ '" data-chunk-offset="' ~ start_time_offset ~ '"' %}
+                        {% endif %}
+
+                        <li title="{{ chunk.get('content', '') | truncate(200) }}"{{ data_attrs | safe }}>
+                            {# Display placeholder initially, JS will format #}
+                            Excerpt: Transcript {{ transcript_id }}, Time: 
+                            <span class="chunk-timestamp">{{ start_time_offset if start_time_offset is number else 'N/A' }}s</span>
                         </li>
                     {% endfor %}
                 </ul>

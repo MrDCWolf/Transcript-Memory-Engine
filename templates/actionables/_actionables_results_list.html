@@ -1,0 +1,125 @@
+<form id="confirmed-actionables-form" hx-post="{{ url_for('prepare_actionables_for_export') }}" hx-target="#export-preparation-status" hx-swap="innerHTML">
+    {% if original_scan_date %}
+        <input type="hidden" name="original_scan_date" value="{{ original_scan_date }}">
+    {% endif %}
+    {% if error %}
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> {{ error }}
+        </div>
+    {% endif %}
+
+    {% if candidates is defined and candidates %}
+        <h4>Potential Actionable Items Found:</h4>
+        <p>Review the items below. Check the ones you want to process, edit as needed, and then click "Prepare for Export".</p>
+        <ul id="candidate-list" class="list-group mb-3">
+            {% for candidate in candidates %}
+                <li class="list-group-item candidate-item mb-2" id="candidate-item-{{ loop.index0 }}">
+                    <div class="row align-items-start">
+                        <div class="col-auto pt-1">
+                            <input type="checkbox" class="form-check-input" name="confirmed_indices" value="{{ loop.index0 }}" id="confirm-{{ loop.index0 }}">
+                        </div>
+                        <div class="col">
+                            <div class="candidate-details">
+                                <input type="hidden" name="original_snippet_{{ loop.index0 }}" value="{{ candidate.snippet }}">
+                                <input type="hidden" name="original_category_{{ loop.index0 }}" value="{{ candidate.suggested_category }}">
+                                <input type="hidden" name="original_entities_{{ loop.index0 }}" value="{{ candidate.raw_entities or '' }}">
+
+                                <div class="mb-2">
+                                    <label for="snippet-{{ loop.index0 }}" class="form-label small mb-0"><strong>Snippet:</strong></label>
+                                    <textarea class="form-control form-control-sm" name="snippet_{{ loop.index0 }}" id="snippet-{{ loop.index0 }}" rows="3">{{ candidate.snippet }}</textarea>
+                                </div>
+                                
+                                <div class="row gx-2 mb-2 align-items-center">
+                                    <div class="col-md-6">
+                                        <label for="category-{{ loop.index0 }}" class="form-label small mb-0"><strong>Category:</strong></label>
+                                        <select class="form-select form-select-sm" name="category_{{ loop.index0 }}" id="category-{{ loop.index0 }}">
+                                            <option value="REMINDER" {% if candidate.suggested_category == 'REMINDER' %}selected{% endif %}>REMINDER</option>
+                                            <option value="EVENT" {% if candidate.suggested_category == 'EVENT' %}selected{% endif %}>EVENT</option>
+                                            <option value="TASK" {% if candidate.suggested_category == 'TASK' %}selected{% endif %}>TASK</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="entities-{{ loop.index0 }}" class="form-label small mb-0"><strong>Entities (edit if needed):</strong></label>
+                                        <input type="text" class="form-control form-control-sm" name="entities_{{ loop.index0 }}" id="entities-{{ loop.index0 }}" value="{{ candidate.raw_entities or '' }}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-danger discard-btn" onclick="discardItem('candidate-item-{{ loop.index0 }}', 'confirm-{{ loop.index0 }}')">Discard</button>
+                        </div>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+        <div class="mt-3 text-end">
+            <button type="submit" class="btn btn-primary">Prepare Selected for Export</button>
+        </div>
+        <div id="export-preparation-status" class="mt-3"></div>
+
+    {% elif candidates is defined and not candidates %}
+        <p class="mt-3">No actionable items were identified for the selected date and timeframe.</p>
+    {% else %}
+        <!-- This state implies an issue or initial load. Handled by the main page message -->
+    {% endif %}
+</form>
+
+<style>
+.candidate-item {
+    border: 1px solid #eee;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+.candidate-item.discarded {
+    opacity: 0.5;
+    background-color: #e9ecef;
+}
+.candidate-item.discarded textarea,
+.candidate-item.discarded select,
+.candidate-item.discarded input[type="text"] {
+    background-color: #f8f9fa; /* Lighten background of inputs in discarded items */
+    pointer-events: none; /* Disable interaction with form elements if item is visually discarded */
+}
+
+.candidate-details textarea {
+    font-size: 0.9rem;
+    min-height: 60px;
+}
+.candidate-details .form-select-sm, .candidate-details .form-control-sm {
+    font-size: 0.85rem;
+}
+.form-label.small {
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: #555;
+}
+</style>
+
+<script>
+function discardItem(itemId, checkboxId) {
+    const itemElement = document.getElementById(itemId);
+    const checkboxElement = document.getElementById(checkboxId);
+    if (itemElement) {
+        itemElement.classList.toggle('discarded');
+        // If discarded, uncheck the checkbox and make it non-submittable by disabling it.
+        // If un-discarded, re-enable it (user might re-check it manually).
+        if (itemElement.classList.contains('discarded')) {
+            if (checkboxElement) {
+                checkboxElement.checked = false;
+                checkboxElement.disabled = true; 
+            }
+        } else {
+            if (checkboxElement) {
+                checkboxElement.disabled = false;
+            }
+        }
+    }
+}
+
+// Ensure htmx processes the form correctly when checkboxes are dynamically disabled/enabled.
+// This might not be strictly necessary depending on HTMX version and browser behavior,
+// but can help ensure only intended data is submitted.
+// Or, handle filtering on the server side based on which checkboxes are actually submitted.
+</script> 
